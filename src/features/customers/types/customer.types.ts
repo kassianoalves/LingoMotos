@@ -1,0 +1,10 @@
+export type Customer = {
+  id: string;
+  name: string;
+  phone: string;
+  whatsapp: string;
+  documentNumber: string;
+  notes: string;
+  updatedAt: string;
+};
+
