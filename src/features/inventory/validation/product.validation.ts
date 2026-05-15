@@ -54,7 +54,7 @@ export function validateStockMovement(values: StockMovementFormValues): Validati
   }
 
   if (values.unitCostCents < 0) {
-    errors.unitCostCents = 'Custo unitario nao pode ser negativo.';
+    errors.unitCostCents = 'Custo unitário não pode ser negativo.';
   }
 
   return {
@@ -62,4 +62,3 @@ export function validateStockMovement(values: StockMovementFormValues): Validati
     errors,
   };
 }
-

@@ -51,39 +51,6 @@ CREATE TABLE IF NOT EXISTS cash_sessions (
   updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE TABLE IF NOT EXISTS whatsapp_settings (
-  id TEXT PRIMARY KEY,
-  api_token TEXT,
-  phone_number_id TEXT,
-  business_account_id TEXT,
-  webhook_url TEXT,
-  connection_status TEXT NOT NULL DEFAULT 'not_configured'
-    CHECK (connection_status IN ('not_configured', 'configured', 'disabled')),
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS whatsapp_contacts (
-  id TEXT PRIMARY KEY,
-  customer_id TEXT REFERENCES customers(id) ON UPDATE CASCADE ON DELETE SET NULL,
-  phone TEXT NOT NULL,
-  display_name TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
-);
-
-CREATE TABLE IF NOT EXISTS whatsapp_messages (
-  id TEXT PRIMARY KEY,
-  contact_id TEXT REFERENCES whatsapp_contacts(id) ON UPDATE CASCADE ON DELETE SET NULL,
-  direction TEXT NOT NULL CHECK (direction IN ('inbound', 'outbound')),
-  status TEXT NOT NULL DEFAULT 'draft' CHECK (status IN ('draft', 'received', 'sent', 'failed')),
-  body TEXT NOT NULL,
-  provider_message_id TEXT,
-  created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  sent_at TEXT,
-  received_at TEXT
-);
-
 CREATE INDEX IF NOT EXISTS ix_financial_transactions_type_status_due
   ON financial_transactions(type, status, due_date);
 
@@ -92,10 +59,3 @@ CREATE INDEX IF NOT EXISTS ix_financial_transactions_category
 
 CREATE INDEX IF NOT EXISTS ix_cash_sessions_status
   ON cash_sessions(status);
-
-CREATE INDEX IF NOT EXISTS ix_whatsapp_contacts_phone
-  ON whatsapp_contacts(phone);
-
-CREATE INDEX IF NOT EXISTS ix_whatsapp_messages_contact_created
-  ON whatsapp_messages(contact_id, created_at);
-

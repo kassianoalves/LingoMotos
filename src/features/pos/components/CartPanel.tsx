@@ -21,7 +21,6 @@ export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove 
           <CardTitle>Carrinho</CardTitle>
           <p className="text-sm text-muted-foreground">{items.length} itens na venda atual.</p>
         </div>
-        <Badge variant="secondary">F8 finaliza</Badge>
       </CardHeader>
       <CardContent>
         <div className="h-[520px] overflow-auto rounded-md border border-border">
@@ -48,11 +47,10 @@ export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove 
                       <Minus className="h-4 w-4" />
                     </Button>
                     <Input
-                      type="number"
-                      min={0}
+                      inputMode="numeric"
                       className="h-9 w-20 text-center"
                       value={item.quantity}
-                      onChange={(event) => onQuantityChange(item.id, Number(event.target.value))}
+                      onChange={(event) => onQuantityChange(item.id, Number(event.target.value.replace(/\D/g, '')) || 0)}
                     />
                     <Button
                       variant="outline"
@@ -95,4 +93,3 @@ export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove 
     </Card>
   );
 }
-

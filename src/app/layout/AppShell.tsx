@@ -7,7 +7,6 @@ import {
   ChevronRight,
   CircleDollarSign,
   Gauge,
-  MessageCircle,
   Moon,
   Plus,
   Search,
@@ -21,7 +20,6 @@ import { FinancePage } from '@features/finance';
 import { CustomersPage } from '@features/customers';
 import { InventoryPage } from '@features/inventory';
 import { PosPage } from '@features/pos';
-import { WhatsappPage } from '@features/whatsapp';
 import { WorkshopPage } from '@features/workshop';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
@@ -32,7 +30,6 @@ import { useThemeStore } from '@shared/stores/theme.store';
 import { HomePage } from '@app/pages/HomePage';
 import { ReportsPage } from '@app/pages/ReportsPage';
 import { SettingsPage } from '@app/pages/SettingsPage';
-import { useGlobalShortcuts } from '@app/shortcuts/useGlobalShortcuts';
 
 type AppRoute = {
   path: string;
@@ -47,11 +44,10 @@ const routes: AppRoute[] = [
   { path: '/vendas', label: 'Vendas', subtitle: 'PDV rápido para venda de balcão', icon: ShoppingCart, group: 'Operação' },
   { path: '/clientes', label: 'Clientes', subtitle: 'Cadastro e relacionamento com clientes', icon: Users, group: 'Operação' },
   { path: '/oficina', label: 'Oficina', subtitle: 'Módulo bloqueado em preparação', icon: Wrench, group: 'Operação' },
-  { path: '/whatsapp', label: 'WhatsApp', subtitle: 'Integração oficial em preparação', icon: MessageCircle, group: 'Operação' },
   { path: '/estoque', label: 'Estoque', subtitle: 'Produtos, categorias, fornecedores e movimentações', icon: Boxes, group: 'Gestão' },
   { path: '/financeiro', label: 'Financeiro', subtitle: 'Receitas, despesas, caixa e relatórios', icon: CircleDollarSign, group: 'Gestão' },
   { path: '/relatorios', label: 'Relatórios', subtitle: 'Consultas consolidadas do sistema', icon: BarChart3, group: 'Gestão' },
-  { path: '/configuracoes', label: 'Configurações', subtitle: 'Preferências, atalhos e estrutura local', icon: Settings, group: 'Gestão' },
+  { path: '/configuracoes', label: 'Configurações', subtitle: 'Preferências e estrutura local', icon: Settings, group: 'Gestão' },
 ];
 
 export function AppShell() {
@@ -66,23 +62,15 @@ export function AppShell() {
   const globalSearchRef = useRef<HTMLInputElement>(null);
   const activeRoute = routes.find((route) => route.path === activePath) ?? routes[0];
 
-  useGlobalShortcuts({
-    navigate: setActivePath,
-    toggleTheme,
-    showCash: () => setActivePath('/financeiro'),
-    focusSearch: () => globalSearchRef.current?.focus(),
-  });
-
   function renderPage() {
     if (activePath === '/inicio') return <HomePage navigate={setActivePath} />;
     if (activePath === '/estoque') return <InventoryPage cashOpen={isCashOpen} />;
     if (activePath === '/vendas') return <PosPage cashOpen={isCashOpen} />;
     if (activePath === '/financeiro') return <FinancePage cashOpen={isCashOpen} />;
-    if (activePath === '/clientes') return <CustomersPage />;
+    if (activePath === '/clientes') return <CustomersPage navigate={setActivePath} />;
     if (activePath === '/relatorios') return <ReportsPage />;
     if (activePath === '/configuracoes') return <SettingsPage />;
     if (activePath === '/oficina') return <WorkshopPage />;
-    if (activePath === '/whatsapp') return <WhatsappPage />;
     return <HomePage navigate={setActivePath} />;
   }
 
@@ -187,4 +175,3 @@ export function AppShell() {
     </div>
   );
 }
-

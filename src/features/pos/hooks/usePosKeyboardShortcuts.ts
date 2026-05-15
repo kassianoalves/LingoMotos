@@ -1,21 +1,19 @@
 import { useEffect } from 'react';
 
 type PosKeyboardShortcuts = {
-  onFocusSearch: () => void;
-  onCheckout: () => void;
   onClearSale: () => void;
-  onPayCash: () => void;
-  onPayPix: () => void;
+  enabled?: boolean;
 };
 
 export function usePosKeyboardShortcuts({
-  onFocusSearch,
-  onCheckout,
   onClearSale,
-  onPayCash,
-  onPayPix,
+  enabled = true,
 }: PosKeyboardShortcuts) {
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     function handleKeyDown(event: KeyboardEvent) {
       const target = event.target as HTMLElement | null;
       const isTyping =
@@ -24,28 +22,8 @@ export function usePosKeyboardShortcuts({
         target?.tagName === 'SELECT' ||
         target?.isContentEditable;
 
-      if (event.key === 'F3') {
-        event.preventDefault();
-        onFocusSearch();
-      }
-
-      if (isTyping && ['F8', 'F9', 'F10', 'Escape'].includes(event.key)) {
+      if (isTyping && event.key === 'Escape') {
         return;
-      }
-
-      if (event.key === 'F8') {
-        event.preventDefault();
-        onCheckout();
-      }
-
-      if (event.key === 'F9') {
-        event.preventDefault();
-        onPayCash();
-      }
-
-      if (event.key === 'F10') {
-        event.preventDefault();
-        onPayPix();
       }
 
       if (event.key === 'Escape') {
@@ -56,5 +34,5 @@ export function usePosKeyboardShortcuts({
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [onCheckout, onClearSale, onFocusSearch, onPayCash, onPayPix]);
+  }, [enabled, onClearSale]);
 }

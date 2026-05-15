@@ -1,5 +1,4 @@
 import { CheckCircle2, XCircle } from 'lucide-react';
-import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
 import type { CartTotals, PosCheckoutResult } from '../types/pos.types';
@@ -58,16 +57,7 @@ export function SaleSummaryPanel({
 
         <div className="grid grid-cols-2 gap-2 pt-2">
           <Button variant="outline" onClick={onClear}>Cancelar Esc</Button>
-          <Button onClick={onCheckout} disabled={pending}>
-            Finalizar F8
-          </Button>
-        </div>
-
-        <div className="flex flex-wrap gap-2 pt-1">
-          <Badge variant="secondary">F3 buscar</Badge>
-          <Badge variant="secondary">Enter adiciona</Badge>
-          <Badge variant="secondary">F9 dinheiro</Badge>
-          <Badge variant="secondary">F10 Pix</Badge>
+          <Button onClick={onCheckout} disabled={pending}>Finalizar venda</Button>
         </div>
       </CardContent>
     </Card>
@@ -82,4 +72,3 @@ function Metric({ label, value, strong }: { label: string; value: string; strong
     </div>
   );
 }
-

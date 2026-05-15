@@ -5,12 +5,14 @@ import type {
   ImportSourceData,
   InventoryFilters,
   Product,
+  CategoryFormValues,
   ProductFormValues,
   ProductImportDraft,
   ProductImportOptions,
   ProductImportPreview,
   ProductImportRequest,
   StockMovementFormValues,
+  SupplierFormValues,
 } from '../types/inventory.types';
 import { buildInventorySummary } from '../utils/inventory-calculations';
 import { validateProduct, validateStockMovement } from '../validation/product.validation';
@@ -46,6 +48,18 @@ export const inventoryService = {
       : await inventoryRepository.createProduct(values);
 
     return { ok: true as const, product };
+  },
+
+  createCategory(values: CategoryFormValues) {
+    return inventoryRepository.createCategory(values);
+  },
+
+  createSupplier(values: SupplierFormValues) {
+    return inventoryRepository.createSupplier(values);
+  },
+
+  removeProduct(productId: string) {
+    return inventoryRepository.deactivateProduct(productId);
   },
 
   async registerStockMovement(values: StockMovementFormValues) {
@@ -103,7 +117,7 @@ export const inventoryService = {
       }
 
       if (values.salePriceCents <= 0) {
-        warnings.push('Produto sem preco de venda.');
+        warnings.push('Produto sem preço de venda.');
       }
 
       if (values.costPriceCents <= 0) {
@@ -223,7 +237,7 @@ function buildAlerts(summary: ReturnType<typeof buildInventorySummary>): Invento
     {
       id: 'pricing',
       severity: 'info',
-      title: `${summary.unpricedCount + summary.uncostedCount} produtos sem preco ou custo`,
+      title: `${summary.unpricedCount + summary.uncostedCount} produtos sem preço ou custo`,
       detail: 'Cadastre custo e venda para relatorios de margem confiaveis.',
       actionLabel: 'Corrigir cadastro',
       filter: summary.unpricedCount > 0 ? 'unpriced' : 'uncosted',

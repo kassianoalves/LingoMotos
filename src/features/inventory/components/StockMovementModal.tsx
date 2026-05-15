@@ -3,6 +3,7 @@ import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import { useRegisterStockMovement } from '../queries/inventory.queries';
 import type { Product, StockMovementFormValues } from '../types/inventory.types';
+import { formatBrlInput, parseBrlToCents } from '@/utils/formatters';
 
 type StockMovementModalProps = {
   products: Product[];
@@ -51,7 +52,7 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">Movimentar estoque</h2>
-            <p className="text-sm text-muted-foreground">Entrada, saida, ajuste, perda ou saldo inicial.</p>
+            <p className="text-sm text-muted-foreground">Entrada, saída, ajuste, perda ou saldo inicial.</p>
           </div>
           <Button type="button" variant="ghost" onClick={onClose}>Fechar</Button>
         </div>
@@ -84,7 +85,7 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
             >
               <option value="purchase">Compra</option>
               <option value="adjustment_in">Ajuste entrada</option>
-              <option value="adjustment_out">Ajuste saida</option>
+              <option value="adjustment_out">Ajuste saída</option>
               <option value="loss">Perda</option>
               <option value="return">Retorno</option>
               <option value="initial_balance">Saldo inicial</option>
@@ -92,7 +93,7 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
           </label>
 
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Direcao</span>
+            <span className="font-medium">Direção</span>
             <select
               className="h-10 rounded-md border border-input bg-background px-3 text-sm"
               value={values.direction}
@@ -101,38 +102,31 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
               }
             >
               <option value="in">Entrada</option>
-              <option value="out">Saida</option>
+              <option value="out">Saída</option>
             </select>
           </label>
 
           <label className="grid gap-2 text-sm">
             <span className="font-medium">Quantidade</span>
             <Input
-              type="number"
-              min={0}
-              step="0.01"
-              value={values.quantity}
-              onChange={(event) => setValues({ ...values, quantity: Number(event.target.value) })}
+              inputMode="numeric"
+              value={String(values.quantity)}
+              onChange={(event) => setValues({ ...values, quantity: Number(event.target.value.replace(/\D/g, '')) || 0 })}
             />
             {errors.quantity && <span className="text-xs text-destructive">{errors.quantity}</span>}
           </label>
 
           <label className="grid gap-2 text-sm">
-            <span className="font-medium">Custo unitario</span>
+            <span className="font-medium">Custo unitário</span>
             <Input
               inputMode="decimal"
-              value={(values.unitCostCents / 100).toFixed(2).replace('.', ',')}
-              onChange={(event) =>
-                setValues({
-                  ...values,
-                  unitCostCents: Math.round(Number(event.target.value.replace(',', '.')) * 100) || 0,
-                })
-              }
+              value={formatBrlInput((values.unitCostCents / 100).toFixed(2).replace('.', ','))}
+              onChange={(event) => setValues({ ...values, unitCostCents: parseBrlToCents(event.target.value) })}
             />
           </label>
 
           <label className="grid gap-2 text-sm md:col-span-2">
-            <span className="font-medium">Observacao</span>
+            <span className="font-medium">Observação</span>
             <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
           </label>
         </div>

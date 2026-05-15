@@ -69,7 +69,7 @@ function CashFlowTable({ cashFlow }: { cashFlow: CashFlowRecord[] }) {
     <Card>
       <CardHeader>
         <CardTitle>Fluxo de caixa</CardTitle>
-        <p className="text-sm text-muted-foreground">Entradas e saidas confirmadas no caixa.</p>
+        <p className="text-sm text-muted-foreground">Entradas e saídas confirmadas no caixa.</p>
       </CardHeader>
       <CardContent>
         <Table>
@@ -182,4 +182,3 @@ function StatusBadge({ status }: { status: string }) {
 function formatDate(value: string) {
   return new Intl.DateTimeFormat('pt-BR').format(new Date(`${value}T00:00:00`));
 }
-

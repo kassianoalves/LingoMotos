@@ -31,7 +31,7 @@ type ImportProductsModalProps = {
 const targetColumns: Array<{ value: ImportColumnKey; label: string }> = [
   { value: 'ignore', label: 'Ignorar' },
   { value: 'sku', label: 'SKU' },
-  { value: 'barcode', label: 'Codigo de barras' },
+  { value: 'barcode', label: 'Código de barras' },
   { value: 'name', label: 'Nome' },
   { value: 'category', label: 'Categoria' },
   { value: 'supplier', label: 'Fornecedor' },
@@ -39,7 +39,7 @@ const targetColumns: Array<{ value: ImportColumnKey; label: string }> = [
   { value: 'salePrice', label: 'Preco venda' },
   { value: 'currentStock', label: 'Estoque' },
   { value: 'minStock', label: 'Estoque minimo' },
-  { value: 'location', label: 'Localizacao' },
+  { value: 'location', label: 'Localização' },
   { value: 'unit', label: 'Unidade' },
 ];
 
@@ -156,7 +156,7 @@ export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
                     }
                   >
                     <option value="skip">Ignorar duplicados</option>
-                    <option value="update_prices">Atualizar precos</option>
+                    <option value="update_prices">Atualizar preços</option>
                     <option value="update_all">Atualizar cadastro completo</option>
                   </select>
                 </label>
@@ -166,7 +166,7 @@ export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
                     checked={options.allowPartialImport}
                     onChange={(event) => setOptions({ ...options, allowPartialImport: event.target.checked })}
                   />
-                  Permitir importacao parcial
+                  Permitir importação parcial
                 </label>
                 <label className="flex items-center gap-2 text-sm">
                   <input
@@ -335,4 +335,3 @@ function ActionBadge({ action }: { action: ProductImportPreview['drafts'][number
 
   return <Badge variant="destructive">Erro</Badge>;
 }
-

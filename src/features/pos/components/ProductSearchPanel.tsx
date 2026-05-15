@@ -46,7 +46,7 @@ export function ProductSearchPanel({
       <CardHeader className="flex flex-row items-center justify-between">
         <div>
           <CardTitle>Buscar produto</CardTitle>
-          <p className="text-sm text-muted-foreground">Digite, leia o codigo de barras ou use F3.</p>
+          <p className="text-sm text-muted-foreground">Digite ou leia o código de barras.</p>
         </div>
         <Badge variant="secondary">Leitor pronto</Badge>
       </CardHeader>
@@ -101,4 +101,3 @@ export function ProductSearchPanel({
     </Card>
   );
 }
-

@@ -3,9 +3,9 @@ import type { CartItem, CartTotals, PaymentLine } from '../types/pos.types';
 export const paymentMethodLabels = {
   cash: 'Dinheiro',
   pix: 'Pix',
-  debit_card: 'Debito',
-  credit_card: 'Credito',
-  store_credit: 'Crediario',
+  debit_card: 'Débito',
+  credit_card: 'Crédito',
+  store_credit: 'Crediário',
 };
 
 export function formatCurrency(cents: number) {
@@ -42,4 +42,3 @@ export function parseMoneyToCents(value: string) {
   const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
   return Math.round(Number(normalized || 0) * 100);
 }
-

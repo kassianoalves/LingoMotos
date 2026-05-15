@@ -4,7 +4,8 @@ export type Customer = {
   phone: string;
   whatsapp: string;
   documentNumber: string;
+  email: string;
+  address: string;
   notes: string;
   updatedAt: string;
 };
-

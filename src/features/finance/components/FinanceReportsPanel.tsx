@@ -22,7 +22,7 @@ export function FinanceReportsPanel({ reports }: FinanceReportsPanelProps) {
   return (
     <Card>
       <CardHeader>
-        <CardTitle>Relatorios simples</CardTitle>
+        <CardTitle>Relatórios simples</CardTitle>
         <p className="text-sm text-muted-foreground">
           Leituras prontas para usuarios leigos entenderem o desempenho da loja.
         </p>
@@ -42,4 +42,3 @@ export function FinanceReportsPanel({ reports }: FinanceReportsPanelProps) {
     </Card>
   );
 }
-

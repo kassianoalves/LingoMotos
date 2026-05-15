@@ -31,6 +31,7 @@ export type Product = {
   soldLast30Days: number;
   lastMovementAt?: string;
   status: ProductStatus;
+  deletedAt?: string;
   createdAt: string;
   updatedAt: string;
 };
@@ -38,6 +39,7 @@ export type Product = {
 export type Category = {
   id: string;
   name: string;
+  description?: string;
   parentId?: string;
   isActive: boolean;
 };
@@ -47,6 +49,10 @@ export type Supplier = {
   name: string;
   documentNumber?: string;
   phone?: string;
+  whatsapp?: string;
+  email?: string;
+  address?: string;
+  notes?: string;
   isActive: boolean;
 };
 
@@ -81,6 +87,23 @@ export type ProductFormValues = {
   salePriceCents: number;
   minStockQuantity: number;
   currentStockQuantity: number;
+};
+
+export type CategoryFormValues = {
+  name: string;
+  description: string;
+  isActive: boolean;
+};
+
+export type SupplierFormValues = {
+  name: string;
+  phone: string;
+  whatsapp: string;
+  documentNumber: string;
+  email: string;
+  address: string;
+  notes: string;
+  isActive: boolean;
 };
 
 export type StockMovementFormValues = {

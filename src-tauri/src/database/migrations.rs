@@ -30,8 +30,8 @@ const MIGRATIONS: &[Migration] = &[
     },
     Migration {
         version: 5,
-        name: "erp_routes_cash_finance_whatsapp",
-        sql: include_str!("../../migrations/0005_erp_routes_cash_finance_whatsapp.sql"),
+        name: "erp_routes_cash_finance",
+        sql: include_str!("../../migrations/0005_erp_routes_cash_finance.sql"),
     },
 ];
 

@@ -135,7 +135,7 @@ export function buildFinanceReports(summary: FinanceSummary): FinanceReport[] {
     },
     {
       title: 'Caixa disponivel',
-      description: 'Entradas confirmadas menos saidas confirmadas no periodo.',
+      description: 'Entradas confirmadas menos saídas confirmadas no período.',
       value: formatCurrency(summary.cashBalanceCents),
       status: summary.cashBalanceCents >= 0 ? 'good' : 'critical',
     },
@@ -147,4 +147,3 @@ export function buildFinanceReports(summary: FinanceSummary): FinanceReport[] {
     },
   ];
 }
-

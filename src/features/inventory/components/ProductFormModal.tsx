@@ -1,17 +1,20 @@
-import { useMemo, useState, type FormEvent, type ReactNode } from 'react';
+import { useEffect, useMemo, useState, type FormEvent, type ReactNode } from 'react';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import type { Category, Product, ProductFormValues, Supplier } from '../types/inventory.types';
 import { useSaveProduct } from '../queries/inventory.queries';
+import { formatBrlInput, parseBrlToCents } from '@/utils/formatters';
 
 type ProductFormModalProps = {
   product: Product | null;
   categories: Category[];
   suppliers: Supplier[];
   onClose: () => void;
+  onNewCategory: () => void;
+  onNewSupplier: () => void;
 };
 
-export function ProductFormModal({ product, categories, suppliers, onClose }: ProductFormModalProps) {
+export function ProductFormModal({ product, categories, suppliers, onClose, onNewCategory, onNewSupplier }: ProductFormModalProps) {
   const saveProduct = useSaveProduct();
   const initialValues = useMemo<ProductFormValues>(
     () => ({
@@ -51,7 +54,7 @@ export function ProductFormModal({ product, categories, suppliers, onClose }: Pr
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">{product ? 'Editar produto' : 'Novo produto'}</h2>
-            <p className="text-sm text-muted-foreground">Cadastro rapido para operacao de balcao.</p>
+            <p className="text-sm text-muted-foreground">Cadastro rápido para operação de balcão.</p>
           </div>
           <Button type="button" variant="ghost" onClick={onClose}>Fechar</Button>
         </div>
@@ -60,13 +63,13 @@ export function ProductFormModal({ product, categories, suppliers, onClose }: Pr
           <Field label="SKU" error={errors.sku}>
             <Input value={values.sku} onChange={(event) => setValues({ ...values, sku: event.target.value })} />
           </Field>
-          <Field label="Codigo de barras">
+          <Field label="Código de barras">
             <Input value={values.barcode} onChange={(event) => setValues({ ...values, barcode: event.target.value })} />
           </Field>
           <Field label="Nome" error={errors.name}>
             <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
           </Field>
-          <Field label="Localizacao">
+          <Field label="Localização">
             <Input value={values.location} onChange={(event) => setValues({ ...values, location: event.target.value })} />
           </Field>
           <Field label="Categoria" error={errors.categoryId}>
@@ -82,7 +85,7 @@ export function ProductFormModal({ product, categories, suppliers, onClose }: Pr
                   </option>
                 ))}
               </select>
-              <Button type="button" variant="outline">Nova categoria</Button>
+              <Button type="button" variant="outline" onClick={onNewCategory}>Nova categoria</Button>
             </div>
           </Field>
           <Field label="Fornecedor">
@@ -99,17 +102,17 @@ export function ProductFormModal({ product, categories, suppliers, onClose }: Pr
                   </option>
                 ))}
               </select>
-              <Button type="button" variant="outline">Novo fornecedor</Button>
+              <Button type="button" variant="outline" onClick={onNewSupplier}>Novo fornecedor</Button>
             </div>
           </Field>
           <MoneyField
-            label="Custo"
+            label="Preço de custo"
             value={values.costPriceCents}
             onChange={(value) => setValues({ ...values, costPriceCents: value })}
             error={errors.costPriceCents}
           />
           <MoneyField
-            label="Venda"
+            label="Preço de venda"
             value={values.salePriceCents}
             onChange={(value) => setValues({ ...values, salePriceCents: value })}
             error={errors.salePriceCents}
@@ -121,7 +124,7 @@ export function ProductFormModal({ product, categories, suppliers, onClose }: Pr
             error={errors.currentStockQuantity}
           />
           <NumberField
-            label="Estoque minimo"
+            label="Estoque mínimo"
             value={values.minStockQuantity}
             onChange={(value) => setValues({ ...values, minStockQuantity: value })}
             error={errors.minStockQuantity}
@@ -160,12 +163,22 @@ function MoneyField({
   onChange: (value: number) => void;
   error?: string;
 }) {
+  const [text, setText] = useState(formatBrlInput((value / 100).toFixed(2).replace('.', ',')));
+
+  useEffect(() => {
+    setText(formatBrlInput((value / 100).toFixed(2).replace('.', ',')));
+  }, [value]);
+
   return (
     <Field label={label} error={error}>
       <Input
         inputMode="decimal"
-        value={(value / 100).toFixed(2).replace('.', ',')}
-        onChange={(event) => onChange(Math.round(Number(event.target.value.replace(',', '.')) * 100) || 0)}
+        value={text}
+        onChange={(event) => {
+          const nextText = formatBrlInput(event.target.value);
+          setText(nextText);
+          onChange(parseBrlToCents(nextText));
+        }}
       />
     </Field>
   );
@@ -185,10 +198,9 @@ function NumberField({
   return (
     <Field label={label} error={error}>
       <Input
-        type="number"
-        min={0}
-        value={value}
-        onChange={(event) => onChange(Number(event.target.value))}
+        inputMode="numeric"
+        value={String(value)}
+        onChange={(event) => onChange(Number(event.target.value.replace(/\D/g, '')) || 0)}
       />
     </Field>
   );

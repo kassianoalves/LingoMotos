@@ -61,7 +61,7 @@ export function InventoryToolbar({
           <option value="all">Todos</option>
           <option value="low_stock">Baixo estoque</option>
           <option value="out_of_stock">Sem estoque</option>
-          <option value="unpriced">Sem preco</option>
+          <option value="unpriced">Sem preço</option>
           <option value="uncosted">Sem custo</option>
         </select>
 
@@ -101,10 +101,9 @@ export function InventoryToolbar({
           <option value="stock">Menor estoque</option>
           <option value="margin">Maior margem</option>
           <option value="sold">Mais vendidos</option>
-          <option value="lastMovement">Ultima movimentacao</option>
+          <option value="lastMovement">Última movimentação</option>
         </select>
       </div>
     </div>
   );
 }
-

@@ -5,19 +5,23 @@ const initialCustomers: Customer[] = [
   {
     id: 'cus-001',
     name: 'Marcos Lima',
-    phone: '(11) 99999-1000',
-    whatsapp: '(11) 99999-1000',
+    phone: '11999991000',
+    whatsapp: '11999991000',
     documentNumber: '123.456.789-00',
-    notes: 'Cliente compra oleo e filtros com frequencia.',
+    email: 'marcos@exemplo.com',
+    address: 'Rua das Oficinas, 120',
+    notes: 'Cliente compra óleo e filtros com frequência.',
     updatedAt: '2026-05-14',
   },
   {
     id: 'cus-002',
     name: 'Ana Souza',
-    phone: '(11) 98888-2000',
-    whatsapp: '(11) 98888-2000',
+    phone: '11988882000',
+    whatsapp: '11988882000',
     documentNumber: '',
-    notes: 'Historico de compras sera vinculado futuramente.',
+    email: 'ana@exemplo.com',
+    address: 'Avenida Central, 45',
+    notes: 'Histórico de compras será vinculado futuramente.',
     updatedAt: '2026-05-12',
   },
 ];
@@ -56,4 +60,3 @@ export const useCustomersStore = create<CustomersState>((set) => ({
       };
     }),
 }));
-

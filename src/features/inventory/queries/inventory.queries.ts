@@ -1,6 +1,13 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { inventoryService } from '../services/inventory.service';
-import type { InventoryFilters, ProductFormValues, ProductImportRequest, StockMovementFormValues } from '../types/inventory.types';
+import type {
+  CategoryFormValues,
+  InventoryFilters,
+  ProductFormValues,
+  ProductImportRequest,
+  StockMovementFormValues,
+  SupplierFormValues,
+} from '../types/inventory.types';
 
 export const inventoryQueryKeys = {
   all: ['inventory'] as const,
@@ -31,6 +38,39 @@ export function useRegisterStockMovement() {
 
   return useMutation({
     mutationFn: (values: StockMovementFormValues) => inventoryService.registerStockMovement(values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
+    },
+  });
+}
+
+export function useCreateCategory() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: CategoryFormValues) => inventoryService.createCategory(values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
+    },
+  });
+}
+
+export function useCreateSupplier() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (values: SupplierFormValues) => inventoryService.createSupplier(values),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
+    },
+  });
+}
+
+export function useRemoveProduct() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (productId: string) => inventoryService.removeProduct(productId),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
     },

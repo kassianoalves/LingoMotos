@@ -16,17 +16,18 @@ type ProductDrawerProps = {
   onClose: () => void;
   onEdit: (product: Product) => void;
   onMovement: (product: Product) => void;
+  onRemove: (product: Product) => void;
 };
 
 const statusLabel = {
-  available: 'Disponivel',
+  available: 'Disponível',
   low_stock: 'Baixo estoque',
   out_of_stock: 'Sem estoque',
-  unpriced: 'Sem preco',
+  unpriced: 'Sem preço',
   uncosted: 'Sem custo',
 };
 
-export function ProductDrawer({ product, onClose, onEdit, onMovement }: ProductDrawerProps) {
+export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }: ProductDrawerProps) {
   if (!product) {
     return null;
   }
@@ -50,6 +51,7 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement }: ProductD
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onMovement(product)}>Movimentar</Button>
           <Button variant="outline" size="sm" onClick={() => onEdit(product)}>Editar</Button>
+          <Button variant="destructive" size="sm" onClick={() => onRemove(product)}>Remover produto</Button>
         </div>
 
         <Card>
@@ -59,7 +61,7 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement }: ProductD
           <CardContent className="grid gap-3 text-sm">
             <Metric label="Status" value={<Badge variant={status === 'available' ? 'success' : 'warning'}>{statusLabel[status]}</Badge>} />
             <Metric label="Estoque atual" value={`${product.currentStockQuantity} ${product.unit}`} />
-            <Metric label="Estoque minimo" value={`${product.minStockQuantity} ${product.unit}`} />
+            <Metric label="Estoque mínimo" value={`${product.minStockQuantity} ${product.unit}`} />
             <Metric label="Custo" value={formatCurrency(product.costPriceCents)} />
             <Metric label="Venda" value={formatCurrency(product.salePriceCents)} />
             <Metric label="Margem" value={`${margin.toFixed(1)}%`} />
@@ -69,14 +71,14 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement }: ProductD
 
         <Card>
           <CardHeader>
-            <CardTitle>Operacao</CardTitle>
+          <CardTitle>Operação</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <Metric label="Categoria" value={product.categoryName} />
             <Metric label="Fornecedor" value={product.supplierName ?? 'Sem fornecedor'} />
-            <Metric label="Localizacao" value={product.location ?? 'Sem local'} />
+            <Metric label="Localização" value={product.location ?? 'Sem local'} />
             <Metric label="Vendidos em 30 dias" value={`${product.soldLast30Days} itens`} />
-            <Metric label="Ultima movimentacao" value={formatDate(product.lastMovementAt)} />
+            <Metric label="Última movimentação" value={formatDate(product.lastMovementAt)} />
           </CardContent>
         </Card>
       </div>

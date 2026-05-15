@@ -51,7 +51,7 @@ export function InventorySummaryCards({ summary }: InventorySummaryCardsProps) {
             </div>
           </div>
           <div>
-            <p className="text-xs text-muted-foreground">Sem preco</p>
+            <p className="text-xs text-muted-foreground">Sem preço</p>
             <p className="font-semibold">{summary.unpricedCount} produtos</p>
           </div>
           <div>
@@ -63,4 +63,3 @@ export function InventorySummaryCards({ summary }: InventorySummaryCardsProps) {
     </div>
   );
 }
-

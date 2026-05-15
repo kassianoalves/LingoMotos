@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent } from '@shared/components/ui/card';
+import { Input } from '@shared/components/ui/input';
 import { ImportProductsModal } from '../components/ImportProductsModal';
 import { InventoryAlerts } from '../components/InventoryAlerts';
 import { InventoryInsights } from '../components/InventoryInsights';
@@ -12,11 +13,17 @@ import { ProductDrawer } from '../components/ProductDrawer';
 import { ProductFormModal } from '../components/ProductFormModal';
 import { ProductVirtualTable } from '../components/ProductVirtualTable';
 import { StockMovementModal } from '../components/StockMovementModal';
-import { useInventory } from '../queries/inventory.queries';
+import { useCreateCategory, useCreateSupplier, useInventory, useRemoveProduct } from '../queries/inventory.queries';
 import { useInventoryStore } from '../stores/inventory.store';
+import type { CategoryFormValues, SupplierFormValues } from '../types/inventory.types';
+import { formatBrazilianPhone, sanitizePhone } from '@features/customers/utils/customer-phone';
+import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
+
+type AuxiliaryModal = 'category' | 'supplier' | null;
 
 export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   const [activeTab, setActiveTab] = useState('Produtos');
+  const [auxiliaryModal, setAuxiliaryModal] = useState<AuxiliaryModal>(null);
   const filters = useInventoryStore((state) => state.filters);
   const selectedProduct = useInventoryStore((state) => state.selectedProduct);
   const activeModal = useInventoryStore((state) => state.activeModal);
@@ -26,7 +33,7 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   const openModal = useInventoryStore((state) => state.openModal);
   const closeModal = useInventoryStore((state) => state.closeModal);
   const inventoryQuery = useInventory(filters);
-
+  const removeProduct = useRemoveProduct();
   const inventory = inventoryQuery.data;
 
   if (!inventory) {
@@ -48,7 +55,7 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
         <div>
           <h2 className="text-xl font-semibold">Estoque</h2>
           <p className="text-sm text-muted-foreground">
-            Cadastro, busca, importacao e movimentacao rapida para substituir planilhas.
+            Cadastro, busca, importação e movimentação rápida para substituir planilhas.
           </p>
         </div>
         <Button onClick={() => openModal('movement')} disabled={!cashOpen}>
@@ -86,17 +93,9 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
             onMovement={() => cashOpen && openModal('movement')}
             onImport={() => openModal('import')}
           />
-
           <InventorySummaryCards summary={inventory.summary} />
-
           <InventoryAlerts alerts={inventory.alerts} onApplyFilter={(filter) => setFilter('stockStatus', filter)} />
-
-          <ProductVirtualTable
-            products={inventory.products}
-            selectedProductId={selectedProduct?.id}
-            onSelectProduct={selectProduct}
-          />
-
+          <ProductVirtualTable products={inventory.products} selectedProductId={selectedProduct?.id} onSelectProduct={selectProduct} />
           <InventoryInsights products={inventory.products} />
         </>
       )}
@@ -104,7 +103,9 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
       {activeTab === 'Categorias' && (
         <SimpleAdminList
           title="Categorias de produtos"
-          rows={inventory.categories.map((category) => [category.name, category.isActive ? 'Ativa' : 'Inativa'])}
+          rows={inventory.categories.map((category) => [category.name, category.description ?? 'Sem descrição', category.isActive ? 'Ativa' : 'Inativa'])}
+          actionLabel="Nova categoria"
+          onCreate={() => setAuxiliaryModal('category')}
         />
       )}
 
@@ -112,6 +113,8 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
         <SimpleAdminList
           title="Fornecedores"
           rows={inventory.suppliers.map((supplier) => [supplier.name, supplier.phone ?? 'Sem telefone', supplier.documentNumber ?? 'Sem CNPJ'])}
+          actionLabel="Novo fornecedor"
+          onCreate={() => setAuxiliaryModal('supplier')}
         />
       )}
 
@@ -129,6 +132,10 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
         onClose={() => selectProduct(null)}
         onEdit={(product) => openModal('product', product)}
         onMovement={(product) => openModal('movement', product)}
+        onRemove={(product) => {
+          if (!window.confirm(`Remover ${product.name}? O histórico será preservado.`)) return;
+          void removeProduct.mutateAsync(product.id).then(() => selectProduct(null));
+        }}
       />
 
       {activeModal === 'product' && (
@@ -137,6 +144,8 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
           categories={inventory.categories}
           suppliers={inventory.suppliers}
           onClose={closeModal}
+          onNewCategory={() => setAuxiliaryModal('category')}
+          onNewSupplier={() => setAuxiliaryModal('supplier')}
         />
       )}
 
@@ -145,21 +154,29 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
       )}
 
       {activeModal === 'import' && <ImportProductsModal onClose={closeModal} />}
+      {auxiliaryModal === 'category' && <CategoryModal onClose={() => setAuxiliaryModal(null)} />}
+      {auxiliaryModal === 'supplier' && <SupplierModal onClose={() => setAuxiliaryModal(null)} />}
     </div>
   );
 }
 
-function SimpleAdminList({ title, rows }: { title: string; rows: string[][] }) {
+function SimpleAdminList({
+  title,
+  rows,
+  actionLabel,
+  onCreate,
+}: {
+  title: string;
+  rows: string[][];
+  actionLabel: string;
+  onCreate: () => void;
+}) {
   return (
     <Card>
       <CardContent className="space-y-3 p-5">
         <div className="flex items-center justify-between">
           <h3 className="font-semibold">{title}</h3>
-          <div className="flex gap-2">
-            <Button size="sm">Novo</Button>
-            <Button size="sm" variant="outline">Editar</Button>
-            <Button size="sm" variant="outline">Desativar</Button>
-          </div>
+          <Button size="sm" onClick={onCreate}>{actionLabel}</Button>
         </div>
         <div className="rounded-md border border-border">
           {rows.map((row) => (
@@ -170,5 +187,128 @@ function SimpleAdminList({ title, rows }: { title: string; rows: string[][] }) {
         </div>
       </CardContent>
     </Card>
+  );
+}
+
+function CategoryModal({ onClose }: { onClose: () => void }) {
+  const createCategory = useCreateCategory();
+  const [values, setValues] = useState<CategoryFormValues>({ name: '', description: '', isActive: true });
+
+  return (
+    <ModalFrame title="Nova categoria" onClose={onClose}>
+      <Field label="Nome da categoria">
+        <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
+      </Field>
+      <Field label="Descrição opcional">
+        <Input value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
+      </Field>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={values.isActive} onChange={(event) => setValues({ ...values, isActive: event.target.checked })} />
+        Ativa
+      </label>
+      <ModalActions
+        onClose={onClose}
+        onSave={() => void createCategory.mutateAsync(values).then(onClose)}
+      />
+    </ModalFrame>
+  );
+}
+
+function SupplierModal({ onClose }: { onClose: () => void }) {
+  const createSupplier = useCreateSupplier();
+  const [values, setValues] = useState<SupplierFormValues>({
+    name: '',
+    phone: '',
+    whatsapp: '',
+    documentNumber: '',
+    email: '',
+    address: '',
+    notes: '',
+    isActive: true,
+  });
+
+  return (
+    <ModalFrame title="Novo fornecedor" onClose={onClose}>
+      <div className="grid gap-4 md:grid-cols-2">
+        <Field label="Nome do fornecedor" className="md:col-span-2">
+          <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
+        </Field>
+        <Field label="Telefone">
+          <Input value={formatBrazilianPhone(values.phone)} onChange={(event) => setValues({ ...values, phone: event.target.value })} />
+        </Field>
+        <Field label="WhatsApp">
+          <Input value={formatBrazilianPhone(values.whatsapp)} onChange={(event) => setValues({ ...values, whatsapp: event.target.value })} />
+        </Field>
+        <Field label="CNPJ">
+          <Input value={formatCpfCnpj(values.documentNumber)} onChange={(event) => setValues({ ...values, documentNumber: event.target.value })} />
+        </Field>
+        <Field label="E-mail">
+          <Input value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} />
+        </Field>
+        <Field label="Endereço" className="md:col-span-2">
+          <Input value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} />
+        </Field>
+        <Field label="Observações" className="md:col-span-2">
+          <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
+        </Field>
+      </div>
+      <label className="flex items-center gap-2 text-sm">
+        <input type="checkbox" checked={values.isActive} onChange={(event) => setValues({ ...values, isActive: event.target.checked })} />
+        Ativo
+      </label>
+      <ModalActions
+        onClose={onClose}
+        onSave={() =>
+          void createSupplier
+            .mutateAsync({
+              ...values,
+              phone: sanitizePhone(values.phone),
+              whatsapp: sanitizePhone(values.whatsapp),
+              documentNumber: onlyDigits(values.documentNumber),
+            })
+            .then(onClose)
+        }
+      />
+    </ModalFrame>
+  );
+}
+
+function ModalFrame({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
+  return (
+    <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
+      <div className="w-[620px] space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
+        <div className="flex items-center justify-between">
+          <h3 className="text-base font-semibold">{title}</h3>
+          <Button variant="ghost" onClick={onClose}>Fechar</Button>
+        </div>
+        {children}
+      </div>
+    </div>
+  );
+}
+
+function ModalActions({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
+  return (
+    <div className="flex justify-end gap-2">
+      <Button variant="outline" onClick={onClose}>Cancelar</Button>
+      <Button onClick={onSave}>Salvar</Button>
+    </div>
+  );
+}
+
+function Field({
+  label,
+  className,
+  children,
+}: {
+  label: string;
+  className?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <label className={`grid gap-2 text-sm ${className ?? ''}`}>
+      <span className="font-medium">{label}</span>
+      {children}
+    </label>
   );
 }

@@ -4,14 +4,18 @@ import type {
   InventoryFilters,
   Product,
   ProductFormValues,
+  CategoryFormValues,
   ProductImportReport,
   ProductImportRequest,
   StockMovementFormValues,
   Supplier,
+  SupplierFormValues,
 } from '../types/inventory.types';
 import { getStockStatus, normalizeSearch } from '../utils/inventory-calculations';
 
 let products = [...inventoryProducts];
+let categories = [...inventoryCategories];
+let suppliers = [...inventorySuppliers];
 
 export type InventoryRepository = {
   listProducts(filters: InventoryFilters): Promise<Product[]>;
@@ -19,6 +23,9 @@ export type InventoryRepository = {
   listSuppliers(): Promise<Supplier[]>;
   createProduct(values: ProductFormValues): Promise<Product>;
   updateProduct(id: string, values: ProductFormValues): Promise<Product>;
+  deactivateProduct(id: string): Promise<Product>;
+  createCategory(values: CategoryFormValues): Promise<Category>;
+  createSupplier(values: SupplierFormValues): Promise<Supplier>;
   registerStockMovement(values: StockMovementFormValues): Promise<Product>;
   importProducts(request: ProductImportRequest): Promise<ProductImportReport>;
 };
@@ -28,6 +35,7 @@ export const inventoryRepository: InventoryRepository = {
     const search = normalizeSearch(filters.search);
 
     return products
+      .filter((product) => product.status === 'active' && !product.deletedAt)
       .filter((product) => {
         if (filters.categoryId && product.categoryId !== filters.categoryId) {
           return false;
@@ -57,17 +65,17 @@ export const inventoryRepository: InventoryRepository = {
   },
 
   async listCategories() {
-    return inventoryCategories.filter((category) => category.isActive);
+    return categories.filter((category) => category.isActive);
   },
 
   async listSuppliers() {
-    return inventorySuppliers.filter((supplier) => supplier.isActive);
+    return suppliers.filter((supplier) => supplier.isActive);
   },
 
   async createProduct(values) {
     const now = new Date().toISOString();
-    const category = inventoryCategories.find((item) => item.id === values.categoryId);
-    const supplier = inventorySuppliers.find((item) => item.id === values.supplierId);
+    const category = categories.find((item) => item.id === values.categoryId);
+    const supplier = suppliers.find((item) => item.id === values.supplierId);
     const product: Product = {
       id: crypto.randomUUID(),
       sku: values.sku,
@@ -95,8 +103,8 @@ export const inventoryRepository: InventoryRepository = {
   },
 
   async updateProduct(id, values) {
-    const category = inventoryCategories.find((item) => item.id === values.categoryId);
-    const supplier = inventorySuppliers.find((item) => item.id === values.supplierId);
+    const category = categories.find((item) => item.id === values.categoryId);
+    const supplier = suppliers.find((item) => item.id === values.supplierId);
     const now = new Date().toISOString();
     let updatedProduct: Product | undefined;
 
@@ -131,6 +139,59 @@ export const inventoryRepository: InventoryRepository = {
     }
 
     return updatedProduct;
+  },
+
+  async deactivateProduct(id) {
+    const now = new Date().toISOString();
+    let updatedProduct: Product | undefined;
+
+    products = products.map((product) => {
+      if (product.id !== id) {
+        return product;
+      }
+
+      updatedProduct = {
+        ...product,
+        status: 'inactive',
+        deletedAt: now,
+        updatedAt: now,
+      };
+
+      return updatedProduct;
+    });
+
+    if (!updatedProduct) {
+      throw new Error('Produto não encontrado.');
+    }
+
+    return updatedProduct;
+  },
+
+  async createCategory(values) {
+    const category: Category = {
+      id: crypto.randomUUID(),
+      name: values.name,
+      description: values.description || undefined,
+      isActive: values.isActive,
+    };
+    categories = [category, ...categories];
+    return category;
+  },
+
+  async createSupplier(values) {
+    const supplier: Supplier = {
+      id: crypto.randomUUID(),
+      name: values.name,
+      phone: values.phone || undefined,
+      whatsapp: values.whatsapp || undefined,
+      documentNumber: values.documentNumber || undefined,
+      email: values.email || undefined,
+      address: values.address || undefined,
+      notes: values.notes || undefined,
+      isActive: values.isActive,
+    };
+    suppliers = [supplier, ...suppliers];
+    return supplier;
   },
 
   async registerStockMovement(values) {
@@ -228,7 +289,7 @@ export const inventoryRepository: InventoryRepository = {
           ...errors,
           {
             rowNumber: 0,
-            message: error instanceof Error ? error.message : 'Erro inesperado na importacao.',
+            message: error instanceof Error ? error.message : 'Erro inesperado na importação.',
           },
         ],
       };

@@ -1,4 +1,3 @@
-import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
 import { Input } from '@shared/components/ui/input';
@@ -50,7 +49,6 @@ export function PaymentPanel({
           {methods.map((method) => (
             <Button key={method} variant="outline" className="justify-between" onClick={() => addPayment(method)}>
               {paymentMethodLabels[method]}
-              <Badge variant="secondary">{method === 'cash' ? 'F9' : method === 'pix' ? 'F10' : '+'}</Badge>
             </Button>
           ))}
         </div>
@@ -77,4 +75,3 @@ export function PaymentPanel({
     </Card>
   );
 }
-

@@ -17,7 +17,7 @@ export function validateCheckout(items: CartItem[], payments: PaymentLine[], tot
     }
 
     if (item.unitPriceCents <= 0) {
-      errors.push(`${item.name}: produto sem preco de venda.`);
+      errors.push(`${item.name}: produto sem preço de venda.`);
     }
   }
 
@@ -34,4 +34,3 @@ export function validateCheckout(items: CartItem[], payments: PaymentLine[], tot
     errors,
   };
 }
-

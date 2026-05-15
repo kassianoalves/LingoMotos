@@ -38,21 +38,6 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
   const products = productsQuery.data ?? [];
   const totals = useMemo(() => calculateCartTotals(items, payments), [items, payments]);
 
-  if (!cashOpen) {
-    return (
-      <div className="p-6">
-        <Card>
-          <CardContent className="p-6">
-            <h2 className="text-xl font-semibold">Venda bloqueada</h2>
-            <p className="mt-2 text-sm text-muted-foreground">
-              Caixa fechado. Abra o caixa para iniciar vendas, baixar estoque por venda ou receber pagamentos.
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-    );
-  }
-
   const focusSearch = useCallback(() => {
     inputRef.current?.focus();
     inputRef.current?.select();
@@ -82,15 +67,9 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
     focusSearch();
   }, [checkoutSale, clearSale, focusSearch, items, payments, setLastError]);
 
-  const payRemainingCash = useCallback(() => fillRemainingPayment('cash'), [fillRemainingPayment]);
-  const payRemainingPix = useCallback(() => fillRemainingPayment('pix'), [fillRemainingPayment]);
-
   usePosKeyboardShortcuts({
-    onFocusSearch: focusSearch,
-    onCheckout: handleCheckout,
     onClearSale: handleClearSale,
-    onPayCash: payRemainingCash,
-    onPayPix: payRemainingPix,
+    enabled: cashOpen,
   });
 
   async function handleSearchChange(value: string) {
@@ -107,6 +86,21 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
     }
   }
 
+  if (!cashOpen) {
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="p-6">
+            <h2 className="text-xl font-semibold">Venda bloqueada</h2>
+            <p className="mt-2 text-sm text-muted-foreground">
+              Caixa fechado. Abra o caixa para iniciar vendas, baixar estoque por venda ou receber pagamentos.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-4 p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -119,7 +113,7 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
         <div className="flex flex-wrap gap-2">
           <Badge variant="success">Caixa aberto</Badge>
           <Badge variant="secondary">Offline local</Badge>
-          <Button variant="outline" size="sm" onClick={focusSearch}>Focar busca F3</Button>
+          <Button variant="outline" size="sm" onClick={focusSearch}>Focar busca</Button>
         </div>
       </div>
 

@@ -20,10 +20,10 @@ const rowHeight = 56;
 const viewportHeight = 480;
 
 const statusLabels = {
-  available: 'Disponivel',
+  available: 'Disponível',
   low_stock: 'Baixo',
   out_of_stock: 'Zerado',
-  unpriced: 'Sem preco',
+  unpriced: 'Sem preço',
   uncosted: 'Sem custo',
 };
 
@@ -128,4 +128,3 @@ export function ProductVirtualTable({ products, selectedProductId, onSelectProdu
     </Card>
   );
 }
-

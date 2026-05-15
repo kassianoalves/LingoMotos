@@ -30,7 +30,7 @@ export function FinanceSummaryCards({ summary }: FinanceSummaryCardsProps) {
     {
       label: 'Caixa',
       value: formatCurrency(summary.cashBalanceCents),
-      meta: `Entradas ${formatCurrency(summary.cashInCents)} · saidas ${formatCurrency(summary.cashOutCents)}`,
+      meta: `Entradas ${formatCurrency(summary.cashInCents)} · saídas ${formatCurrency(summary.cashOutCents)}`,
       icon: Banknote,
     },
     {
@@ -68,4 +68,3 @@ export function FinanceSummaryCards({ summary }: FinanceSummaryCardsProps) {
     </div>
   );
 }
-
