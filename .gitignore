@@ -4,12 +4,18 @@ dist-ssr/
 .vite/
 
 src-tauri/target/
+src-tauri/target
+src-tauri/target-check*
 src-tauri/gen/
 src-tauri/.tauri/
 
 *.log
 *.local
+*.db
+*.sqlite
+*.sqlite3
 .env
+.env.local
 .env.*
 !.env.example
-
+private.key

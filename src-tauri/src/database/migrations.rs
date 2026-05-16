@@ -33,6 +33,46 @@ const MIGRATIONS: &[Migration] = &[
         name: "erp_routes_cash_finance",
         sql: include_str!("../../migrations/0005_erp_routes_cash_finance.sql"),
     },
+    Migration {
+        version: 6,
+        name: "financial_goals",
+        sql: include_str!("../../migrations/0006_financial_goals.sql"),
+    },
+    Migration {
+        version: 7,
+        name: "products_stock_real_persistence",
+        sql: include_str!("../../migrations/0007_products_stock_real_persistence.sql"),
+    },
+    Migration {
+        version: 8,
+        name: "cash_sales_finance_integration",
+        sql: include_str!("../../migrations/0008_cash_sales_finance_integration.sql"),
+    },
+    Migration {
+        version: 9,
+        name: "master_password",
+        sql: include_str!("../../migrations/0009_master_password.sql"),
+    },
+    Migration {
+        version: 10,
+        name: "store_pix_settings",
+        sql: include_str!("../../migrations/0010_store_pix_settings.sql"),
+    },
+    Migration {
+        version: 11,
+        name: "sales_discount_type_amount",
+        sql: include_str!("../../migrations/0011_sales_discount_type_amount.sql"),
+    },
+    Migration {
+        version: 12,
+        name: "accounts_payable_receivable",
+        sql: include_str!("../../migrations/0012_accounts_payable_receivable.sql"),
+    },
+    Migration {
+        version: 13,
+        name: "product_custom_fields",
+        sql: include_str!("../../migrations/0013_product_custom_fields.sql"),
+    },
 ];
 
 pub fn run_migrations(connection: &Connection) -> AppResult<()> {
@@ -58,6 +98,9 @@ pub fn run_migrations(connection: &Connection) -> AppResult<()> {
         }
 
         let transaction = connection.unchecked_transaction()?;
+        if migration.version == 11 {
+            ensure_sales_discount_columns(&transaction)?;
+        }
         transaction.execute_batch(migration.sql)?;
         transaction.execute(
             "INSERT INTO schema_migrations (version, name) VALUES (?1, ?2)",
@@ -67,4 +110,37 @@ pub fn run_migrations(connection: &Connection) -> AppResult<()> {
     }
 
     Ok(())
+}
+
+fn ensure_sales_discount_columns(connection: &Connection) -> AppResult<()> {
+    if !column_exists(connection, "sales", "discount_type")? {
+        connection.execute_batch(
+            "ALTER TABLE sales
+             ADD COLUMN discount_type TEXT NOT NULL DEFAULT 'value'
+             CHECK (discount_type IN ('value', 'percentage'));",
+        )?;
+    }
+
+    if !column_exists(connection, "sales", "discount_amount")? {
+        connection.execute_batch(
+            "ALTER TABLE sales
+             ADD COLUMN discount_amount REAL NOT NULL DEFAULT 0
+             CHECK (discount_amount >= 0);",
+        )?;
+    }
+
+    Ok(())
+}
+
+fn column_exists(connection: &Connection, table_name: &str, column_name: &str) -> AppResult<bool> {
+    let mut statement = connection.prepare(&format!("PRAGMA table_info({table_name})"))?;
+    let columns = statement.query_map([], |row| row.get::<_, String>(1))?;
+
+    for column in columns {
+        if column? == column_name {
+            return Ok(true);
+        }
+    }
+
+    Ok(false)
 }

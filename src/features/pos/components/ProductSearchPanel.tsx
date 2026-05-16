@@ -42,15 +42,15 @@ export function ProductSearchPanel({
   }
 
   return (
-    <Card>
-      <CardHeader className="flex flex-row items-center justify-between">
+    <Card className="flex h-full min-h-0 flex-col">
+      <CardHeader className="flex flex-row items-center justify-between space-y-1 p-4 pb-2">
         <div>
           <CardTitle>Buscar produto</CardTitle>
           <p className="text-sm text-muted-foreground">Digite ou leia o código de barras.</p>
         </div>
         <Badge variant="secondary">Leitor pronto</Badge>
       </CardHeader>
-      <CardContent className="space-y-4">
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-3 p-4 pt-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -58,13 +58,13 @@ export function ProductSearchPanel({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-14 pl-10 text-base"
-            placeholder="Produto, SKU ou codigo de barras"
+            className="h-11 pl-10 text-base"
+            placeholder="Produto, SKU / código interno ou código de barras"
           />
           <Barcode className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
         </div>
 
-        <div className="h-[520px] overflow-auto rounded-md border border-border">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
           {products.map((product, index) => (
             <button
               key={product.id}
@@ -93,7 +93,7 @@ export function ProductSearchPanel({
 
           {products.length === 0 && (
             <div className="grid h-full place-items-center p-6 text-center text-sm text-muted-foreground">
-              Nenhum produto encontrado.
+              {query ? 'Nenhum produto encontrado.' : 'Nenhum produto cadastrado ainda.'}
             </div>
           )}
         </div>

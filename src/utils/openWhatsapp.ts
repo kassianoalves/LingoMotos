@@ -2,45 +2,41 @@ export type OpenWhatsappResult =
   | { ok: true; url: string }
   | { ok: false; error: string };
 
+import { buildWhatsappUrl as buildQrWhatsappUrl, sanitizePhone } from './whatsapp';
+
 export function onlyDigits(value: string): string {
   return value.replace(/\D/g, '');
 }
 
-export function normalizeBrazilianWhatsappNumber(phone: string): string | null {
-  const digits = onlyDigits(phone);
-  const nationalNumber = digits.startsWith('55') && digits.length > 11 ? digits.slice(2) : digits;
-
-  if (!/^\d{10,11}$/.test(nationalNumber)) {
-    return null;
-  }
-
-  return `55${nationalNumber}`;
-}
-
 export function isValidWhatsappPhone(phone: string): boolean {
-  return normalizeBrazilianWhatsappNumber(phone) !== null;
+  return Boolean(sanitizePhone(phone));
 }
 
 export function buildWhatsappUrl(phone: string, message?: string): OpenWhatsappResult {
-  const normalizedPhone = normalizeBrazilianWhatsappNumber(phone);
-
-  if (!normalizedPhone) {
+  const url = buildQrWhatsappUrl(phone, message);
+  if (!url) {
     return { ok: false, error: 'Telefone invalido para WhatsApp.' };
   }
-
-  const baseUrl = `https://wa.me/${normalizedPhone}`;
-  const url = message ? `${baseUrl}?text=${encodeURIComponent(message)}` : baseUrl;
-
   return { ok: true, url };
 }
 
-export function openWhatsapp(phone: string, message?: string): OpenWhatsappResult {
+import { invokeCommand } from '@shared/lib/tauri/invoke-command';
+
+export async function openWhatsapp(phone: string, message?: string): Promise<OpenWhatsappResult> {
   const result = buildWhatsappUrl(phone, message);
 
   if (!result.ok) {
     return result;
   }
 
-  window.open(result.url, '_blank', 'noopener,noreferrer');
+  try {
+    await invokeCommand('open_external_url', { url: result.url });
+  } catch {
+    const popup = window.open(result.url, '_blank', 'noopener,noreferrer');
+    if (!popup) {
+      return { ok: false, error: 'Não foi possível abrir o WhatsApp.' };
+    }
+  }
+
   return result;
 }

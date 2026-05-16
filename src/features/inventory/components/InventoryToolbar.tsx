@@ -1,4 +1,4 @@
-import { FileSpreadsheet, PackagePlus, Plus, Search, SlidersHorizontal } from 'lucide-react';
+import { PackagePlus, Plus, Search, SlidersHorizontal } from 'lucide-react';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import type { Category, InventoryFilters, Supplier } from '../types/inventory.types';
@@ -34,7 +34,7 @@ export function InventoryToolbar({
             className="h-11 pl-9"
             value={filters.search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar por produto, SKU, codigo de barras, fornecedor ou localizacao"
+            placeholder="Buscar por produto, SKU / código interno, código de barras, marca ou aplicação"
           />
         </div>
         <Button onClick={onNewProduct}>
@@ -46,7 +46,6 @@ export function InventoryToolbar({
           Movimentar
         </Button>
         <Button variant="outline" onClick={onImport}>
-          <FileSpreadsheet className="h-4 w-4" />
           Importar
         </Button>
       </div>
@@ -97,7 +96,7 @@ export function InventoryToolbar({
           onChange={(event) => onFilterChange('sortBy', event.target.value as InventoryFilters['sortBy'])}
         >
           <option value="name">Nome</option>
-          <option value="sku">SKU</option>
+          <option value="sku">SKU / Código interno</option>
           <option value="stock">Menor estoque</option>
           <option value="margin">Maior margem</option>
           <option value="sold">Mais vendidos</option>

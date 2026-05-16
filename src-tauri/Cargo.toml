@@ -1,6 +1,6 @@
 [package]
 name = "lingomotos"
-version = "0.1.0"
+version = "0.1.5"
 description = "Sistema desktop offline-first para loja e oficina de motos"
 authors = ["LingoMotos"]
 edition = "2021"
@@ -18,5 +18,8 @@ rusqlite = { version = "0.31", features = ["bundled"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 tauri = { version = "2", features = [] }
+tauri-plugin-dialog = "2"
 thiserror = "1"
-
+bcrypt = "0.15"
+chrono = { version = "0.4", features = ["clock"] }
+deunicode = "1"

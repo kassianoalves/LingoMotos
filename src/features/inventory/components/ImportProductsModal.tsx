@@ -3,6 +3,7 @@ import { AlertTriangle, CheckCircle2, FileSpreadsheet, RotateCcw } from 'lucide-
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent } from '@shared/components/ui/card';
+import { Input } from '@shared/components/ui/input';
 import {
   Table,
   TableBody,
@@ -16,6 +17,7 @@ import { useImportProducts } from '../queries/inventory.queries';
 import type {
   ImportColumnKey,
   ImportColumnMapping,
+  ImportColumnTarget,
   ImportSourceData,
   ProductImportOptions,
   ProductImportPreview,
@@ -29,17 +31,20 @@ type ImportProductsModalProps = {
 };
 
 const targetColumns: Array<{ value: ImportColumnKey; label: string }> = [
-  { value: 'ignore', label: 'Ignorar' },
-  { value: 'sku', label: 'SKU' },
+  { value: 'ignore', label: 'Ignorar coluna' },
+  { value: 'sku', label: 'SKU / Código interno' },
   { value: 'barcode', label: 'Código de barras' },
-  { value: 'name', label: 'Nome' },
+  { value: 'name', label: 'Nome do produto' },
   { value: 'category', label: 'Categoria' },
   { value: 'supplier', label: 'Fornecedor' },
-  { value: 'costPrice', label: 'Custo' },
-  { value: 'salePrice', label: 'Preco venda' },
-  { value: 'currentStock', label: 'Estoque' },
-  { value: 'minStock', label: 'Estoque minimo' },
+  { value: 'brand', label: 'Marca' },
+  { value: 'motorcycleApplication', label: 'Aplicação / Moto compatível' },
+  { value: 'costPrice', label: 'Preço de custo' },
+  { value: 'salePrice', label: 'Preço de venda' },
+  { value: 'currentStock', label: 'Estoque atual' },
+  { value: 'minStock', label: 'Estoque mínimo' },
   { value: 'location', label: 'Localização' },
+  { value: 'notes', label: 'Observações' },
   { value: 'unit', label: 'Unidade' },
 ];
 
@@ -49,6 +54,14 @@ const defaultOptions: ProductImportOptions = {
   rollbackOnError: true,
 };
 
+const customFieldTypes = [
+  { value: 'text', label: 'Texto' },
+  { value: 'number', label: 'Número' },
+  { value: 'currency', label: 'Moeda' },
+  { value: 'date', label: 'Data' },
+  { value: 'boolean', label: 'Booleano' },
+] as const;
+
 export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
   const importProducts = useImportProducts();
   const [source, setSource] = useState<ImportSourceData | null>(null);
@@ -57,6 +70,10 @@ export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
   const [preview, setPreview] = useState<ProductImportPreview | null>(null);
   const [report, setReport] = useState<ProductImportReport | null>(null);
   const [error, setError] = useState('');
+
+  function updateMapping(header: string, target: ImportColumnTarget) {
+    setMapping((current) => ({ ...current, [header]: target }));
+  }
 
   async function handleFile(file: File | undefined) {
     if (!file) {
@@ -204,12 +221,19 @@ export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
                         <span className="truncate text-muted-foreground">{header}</span>
                         <select
                           className="h-9 rounded-md border border-input bg-background px-3"
-                          value={mapping[header] ?? 'ignore'}
+                          value={mapping[header]?.kind === 'custom' ? '__custom__' : mapping[header]?.field ?? 'ignore'}
                           onChange={(event) =>
-                            setMapping({
-                              ...mapping,
-                              [header]: event.target.value as ImportColumnKey,
-                            })
+                            event.target.value === '__custom__'
+                              ? updateMapping(header, {
+                                  kind: 'custom',
+                                  fieldKey: sanitizeFieldKey(header),
+                                  fieldLabel: header,
+                                  fieldType: 'text',
+                                })
+                              : updateMapping(header, {
+                                  kind: 'known',
+                                  field: event.target.value as ImportColumnKey,
+                                })
                           }
                         >
                           {targetColumns.map((column) => (
@@ -217,7 +241,48 @@ export function ImportProductsModal({ onClose }: ImportProductsModalProps) {
                               {column.label}
                             </option>
                           ))}
+                          <option value="__custom__">Criar campo personalizado</option>
                         </select>
+                        {mapping[header]?.kind === 'custom' && (
+                          <div className="grid gap-2 rounded-md border border-border bg-muted/20 p-3">
+                            {(() => {
+                              const customTarget = mapping[header];
+                              if (customTarget.kind !== 'custom') return null;
+                              return (
+                                <>
+                            <Input
+                              value={customTarget.fieldLabel}
+                              onChange={(event: React.ChangeEvent<HTMLInputElement>) =>
+                                updateMapping(header, {
+                                  kind: 'custom',
+                                  fieldLabel: event.target.value,
+                                  fieldKey: sanitizeFieldKey(event.target.value || header),
+                                  fieldType: customTarget.fieldType,
+                                })
+                              }
+                              placeholder="Nome amigável"
+                            />
+                            <select
+                              className="h-9 rounded-md border border-input bg-background px-3"
+                              value={customTarget.fieldType}
+                              onChange={(event) =>
+                                updateMapping(header, {
+                                  kind: 'custom',
+                                  fieldKey: customTarget.fieldKey,
+                                  fieldLabel: customTarget.fieldLabel,
+                                  fieldType: event.target.value as (typeof customFieldTypes)[number]['value'],
+                                })
+                              }
+                            >
+                              {customFieldTypes.map((item) => (
+                                <option key={item.value} value={item.value}>{item.label}</option>
+                              ))}
+                            </select>
+                                </>
+                              );
+                            })()}
+                          </div>
+                        )}
                       </label>
                     ))}
                   </div>
@@ -253,7 +318,7 @@ function ImportPreview({ preview }: { preview: ProductImportPreview }) {
               <TableRow>
                 <TableHead>Linha</TableHead>
                 <TableHead>Acao</TableHead>
-                <TableHead>SKU</TableHead>
+                <TableHead>SKU / Código interno</TableHead>
                 <TableHead>Produto</TableHead>
                 <TableHead>Custo</TableHead>
                 <TableHead>Venda</TableHead>
@@ -266,7 +331,12 @@ function ImportPreview({ preview }: { preview: ProductImportPreview }) {
                 <TableRow key={draft.rowNumber}>
                   <TableCell>{draft.rowNumber}</TableCell>
                   <TableCell><ActionBadge action={draft.action} /></TableCell>
-                  <TableCell>{draft.values.sku}</TableCell>
+                  <TableCell>
+                    <div className="flex items-center gap-2">
+                      <span>{draft.values.sku}</span>
+                      {draft.skuGeneratedAutomatically && <Badge variant="secondary">Gerado automaticamente</Badge>}
+                    </div>
+                  </TableCell>
                   <TableCell className="font-medium">{draft.values.name}</TableCell>
                   <TableCell>{formatCurrency(draft.values.costPriceCents)}</TableCell>
                   <TableCell>{formatCurrency(draft.values.salePriceCents)}</TableCell>
@@ -303,6 +373,7 @@ function ImportReport({ report }: { report: ProductImportReport }) {
           <Badge variant="success">{report.imported} criados</Badge>
           <Badge variant="info">{report.updated} atualizados</Badge>
           <Badge variant="warning">{report.skipped} ignorados</Badge>
+          <Badge variant="secondary">{report.customFieldsSaved} campos personalizados</Badge>
           <Badge variant={report.failed > 0 ? 'destructive' : 'success'}>{report.failed} falhas</Badge>
           {report.rolledBack && <Badge variant="warning">rollback aplicado</Badge>}
         </div>
@@ -318,6 +389,16 @@ function ImportReport({ report }: { report: ProductImportReport }) {
       </CardContent>
     </Card>
   );
+}
+
+function sanitizeFieldKey(value: string) {
+  return value
+    .trim()
+    .toLocaleLowerCase('pt-BR')
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/[^a-z0-9]+/g, '_')
+    .replace(/^_+|_+$/g, '');
 }
 
 function ActionBadge({ action }: { action: ProductImportPreview['drafts'][number]['action'] }) {

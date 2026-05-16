@@ -1,25 +1,38 @@
-import { PackagePlus, RefreshCw } from 'lucide-react';
+import { Pencil, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent } from '@shared/components/ui/card';
 import { Input } from '@shared/components/ui/input';
-import { ImportProductsModal } from '../components/ImportProductsModal';
 import { InventoryAlerts } from '../components/InventoryAlerts';
 import { InventoryInsights } from '../components/InventoryInsights';
 import { InventorySummaryCards } from '../components/InventorySummaryCards';
 import { InventoryToolbar } from '../components/InventoryToolbar';
+import { ImportProductsModal } from '../components/ImportProductsModal';
 import { ProductDrawer } from '../components/ProductDrawer';
 import { ProductFormModal } from '../components/ProductFormModal';
 import { ProductVirtualTable } from '../components/ProductVirtualTable';
 import { StockMovementModal } from '../components/StockMovementModal';
-import { useCreateCategory, useCreateSupplier, useInventory, useRemoveProduct } from '../queries/inventory.queries';
+import {
+  useCreateCategory,
+  useCreateSupplier,
+  useDeactivateCategory,
+  useDeactivateSupplier,
+  useInventory,
+  useRemoveProduct,
+  useStockMovements,
+  useUpdateCategory,
+  useUpdateSupplier,
+} from '../queries/inventory.queries';
 import { useInventoryStore } from '../stores/inventory.store';
-import type { CategoryFormValues, SupplierFormValues } from '../types/inventory.types';
+import type { Category, CategoryFormValues, Supplier, SupplierFormValues } from '../types/inventory.types';
 import { formatBrazilianPhone, sanitizePhone } from '@features/customers/utils/customer-phone';
 import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
 
-type AuxiliaryModal = 'category' | 'supplier' | null;
+type AuxiliaryModal =
+  | { type: 'category'; item?: Category }
+  | { type: 'supplier'; item?: Supplier }
+  | null;
 
 export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   const [activeTab, setActiveTab] = useState('Produtos');
@@ -33,8 +46,28 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   const openModal = useInventoryStore((state) => state.openModal);
   const closeModal = useInventoryStore((state) => state.closeModal);
   const inventoryQuery = useInventory(filters);
+  const movementsQuery = useStockMovements();
   const removeProduct = useRemoveProduct();
+  const deactivateCategory = useDeactivateCategory();
+  const deactivateSupplier = useDeactivateSupplier();
   const inventory = inventoryQuery.data;
+
+  if (inventoryQuery.isError) {
+    console.error(inventoryQuery.error);
+    return (
+      <div className="p-6">
+        <Card>
+          <CardContent className="space-y-4 p-6">
+            <div>
+              <h2 className="text-xl font-semibold">Erro ao carregar estoque</h2>
+              <p className="mt-2 text-sm text-muted-foreground">Nao foi possivel carregar os produtos.</p>
+            </div>
+            <Button onClick={() => void inventoryQuery.refetch()}>Tentar novamente</Button>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   if (!inventory) {
     return (
@@ -50,35 +83,22 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   }
 
   return (
-    <div className="space-y-6 p-6">
-      <div className="flex items-start justify-between gap-4">
-        <div>
-          <h2 className="text-xl font-semibold">Estoque</h2>
-          <p className="text-sm text-muted-foreground">
-            Cadastro, busca, importação e movimentação rápida para substituir planilhas.
-          </p>
+    <div className="space-y-5 px-6 pb-6 pt-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap gap-2">
+          {['Produtos', 'Categorias', 'Fornecedores', 'Movimentações'].map((tab) => (
+            <Button key={tab} variant={activeTab === tab ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(tab)}>
+              {tab}
+            </Button>
+          ))}
         </div>
-        <Button onClick={() => openModal('movement')} disabled={!cashOpen}>
-          <PackagePlus className="h-4 w-4" />
-          Movimentar estoque
-        </Button>
-      </div>
-
-      <div className="flex flex-wrap gap-2">
-        {['Produtos', 'Categorias', 'Fornecedores', 'Movimentações', 'Importação'].map((tab) => (
-          <Button
-            key={tab}
-            variant={activeTab === tab ? 'default' : 'outline'}
-            size="sm"
-            onClick={() => {
-              setActiveTab(tab);
-              if (tab === 'Importação') openModal('import');
-            }}
-          >
-            {tab}
+        <div className="flex gap-2">
+          {!cashOpen && <Badge variant="warning">Movimentações bloqueadas: caixa fechado</Badge>}
+          <Button onClick={() => openModal('movement')} disabled={!cashOpen} size="sm">
+            <PackagePlus className="h-4 w-4" />
+            Movimentar estoque
           </Button>
-        ))}
-        {!cashOpen && <Badge variant="warning">Movimentações bloqueadas: caixa fechado</Badge>}
+        </div>
       </div>
 
       {activeTab === 'Produtos' && (
@@ -96,33 +116,65 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
           <InventorySummaryCards summary={inventory.summary} />
           <InventoryAlerts alerts={inventory.alerts} onApplyFilter={(filter) => setFilter('stockStatus', filter)} />
           <ProductVirtualTable products={inventory.products} selectedProductId={selectedProduct?.id} onSelectProduct={selectProduct} />
+          {inventory.products.length === 0 && (
+            <Card>
+              <CardContent className="flex items-center justify-center gap-4 p-5">
+                <p className="text-sm text-muted-foreground">Nenhum produto cadastrado ainda.</p>
+              </CardContent>
+            </Card>
+          )}
           <InventoryInsights products={inventory.products} />
         </>
       )}
 
       {activeTab === 'Categorias' && (
-        <SimpleAdminList
+        <EntityAdminList
           title="Categorias de produtos"
-          rows={inventory.categories.map((category) => [category.name, category.description ?? 'Sem descrição', category.isActive ? 'Ativa' : 'Inativa'])}
           actionLabel="Nova categoria"
-          onCreate={() => setAuxiliaryModal('category')}
+          rows={inventory.categories.map((category) => ({
+            id: category.id,
+            cells: [category.name, category.description ?? 'Sem descricao', category.isActive ? 'Ativa' : 'Inativa'],
+            onEdit: () => setAuxiliaryModal({ type: 'category', item: category }),
+            onDeactivate: () => {
+              if (window.confirm(`Desativar ${category.name}?`)) void deactivateCategory.mutateAsync(category.id);
+            },
+          }))}
+          onCreate={() => setAuxiliaryModal({ type: 'category' })}
         />
       )}
 
       {activeTab === 'Fornecedores' && (
-        <SimpleAdminList
+        <EntityAdminList
           title="Fornecedores"
-          rows={inventory.suppliers.map((supplier) => [supplier.name, supplier.phone ?? 'Sem telefone', supplier.documentNumber ?? 'Sem CNPJ'])}
           actionLabel="Novo fornecedor"
-          onCreate={() => setAuxiliaryModal('supplier')}
+          rows={inventory.suppliers.map((supplier) => ({
+            id: supplier.id,
+            cells: [supplier.name, supplier.phone ?? 'Sem telefone', supplier.documentNumber ?? 'Sem CNPJ'],
+            onEdit: () => setAuxiliaryModal({ type: 'supplier', item: supplier }),
+            onDeactivate: () => {
+              if (window.confirm(`Desativar ${supplier.name}?`)) void deactivateSupplier.mutateAsync(supplier.id);
+            },
+          }))}
+          onCreate={() => setAuxiliaryModal({ type: 'supplier' })}
         />
       )}
 
-      {activeTab === 'Movimentações' && (
+      {activeTab === 'Movimentacoes' && (
         <Card>
-          <CardContent className="p-5">
-            <h3 className="font-semibold">Movimentações</h3>
-            <p className="mt-2 text-sm text-muted-foreground">Histórico de entradas, saídas, ajustes e vendas será listado aqui.</p>
+          <CardContent className="space-y-3 p-5">
+            <h3 className="font-semibold">Movimentacoes</h3>
+            <div className="rounded-md border border-border">
+              {(movementsQuery.data ?? []).map((movement) => (
+                <div key={movement.id} className="grid grid-cols-5 gap-3 border-b border-border p-3 text-sm">
+                  <span>{movement.movementType}</span>
+                  <span>{movement.direction}</span>
+                  <span>{movement.quantity}</span>
+                  <span>{movement.reason || '-'}</span>
+                  <span>{movement.occurredAt}</span>
+                </div>
+              ))}
+              {(movementsQuery.data?.length ?? 0) === 0 && <p className="p-3 text-sm text-muted-foreground">Sem movimentacoes.</p>}
+            </div>
           </CardContent>
         </Card>
       )}
@@ -133,7 +185,7 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
         onEdit={(product) => openModal('product', product)}
         onMovement={(product) => openModal('movement', product)}
         onRemove={(product) => {
-          if (!window.confirm(`Remover ${product.name}? O histórico será preservado.`)) return;
+          if (!window.confirm(`Remover ${product.name}? O historico sera preservado.`)) return;
           void removeProduct.mutateAsync(product.id).then(() => selectProduct(null));
         }}
       />
@@ -144,44 +196,48 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
           categories={inventory.categories}
           suppliers={inventory.suppliers}
           onClose={closeModal}
-          onNewCategory={() => setAuxiliaryModal('category')}
-          onNewSupplier={() => setAuxiliaryModal('supplier')}
+          onNewCategory={() => setAuxiliaryModal({ type: 'category' })}
+          onNewSupplier={() => setAuxiliaryModal({ type: 'supplier' })}
         />
       )}
-
-      {activeModal === 'movement' && (
-        <StockMovementModal products={inventory.products} selectedProduct={selectedProduct} onClose={closeModal} />
-      )}
-
+      {activeModal === 'movement' && <StockMovementModal products={inventory.products} selectedProduct={selectedProduct} onClose={closeModal} />}
       {activeModal === 'import' && <ImportProductsModal onClose={closeModal} />}
-      {auxiliaryModal === 'category' && <CategoryModal onClose={() => setAuxiliaryModal(null)} />}
-      {auxiliaryModal === 'supplier' && <SupplierModal onClose={() => setAuxiliaryModal(null)} />}
+      {auxiliaryModal?.type === 'category' && <CategoryModal category={auxiliaryModal.item} onClose={() => setAuxiliaryModal(null)} />}
+      {auxiliaryModal?.type === 'supplier' && <SupplierModal supplier={auxiliaryModal.item} onClose={() => setAuxiliaryModal(null)} />}
     </div>
   );
 }
 
-function SimpleAdminList({
+function EntityAdminList({
   title,
   rows,
   actionLabel,
   onCreate,
 }: {
   title: string;
-  rows: string[][];
+  rows: Array<{ id: string; cells: string[]; onEdit: () => void; onDeactivate: () => void }>;
   actionLabel: string;
   onCreate: () => void;
 }) {
   return (
-    <Card>
-      <CardContent className="space-y-3 p-5">
-        <div className="flex items-center justify-between">
+    <Card className="flex min-h-0 flex-col">
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-3 p-5">
+        <div className="flex items-center justify-between flex-none">
           <h3 className="font-semibold">{title}</h3>
           <Button size="sm" onClick={onCreate}>{actionLabel}</Button>
         </div>
-        <div className="rounded-md border border-border">
+        <div className="min-h-0 flex-1 rounded-md border border-border overflow-auto">
           {rows.map((row) => (
-            <div key={row.join('-')} className="grid grid-cols-3 gap-3 border-b border-border p-3 text-sm">
-              {row.map((cell) => <span key={cell}>{cell}</span>)}
+            <div key={row.id} className="grid grid-cols-[1fr_1fr_1fr_auto] gap-3 border-b border-border p-3 text-sm">
+              {row.cells.map((cell) => <span key={cell}>{cell}</span>)}
+              <div className="flex gap-1">
+                <Button size="sm" variant="ghost" onClick={row.onEdit} aria-label="Editar">
+                  <Pencil className="h-4 w-4" />
+                </Button>
+                <Button size="sm" variant="ghost" onClick={row.onDeactivate} aria-label="Desativar">
+                  <Trash2 className="h-4 w-4" />
+                </Button>
+              </div>
             </div>
           ))}
         </div>
@@ -190,45 +246,54 @@ function SimpleAdminList({
   );
 }
 
-function CategoryModal({ onClose }: { onClose: () => void }) {
+function CategoryModal({ category, onClose }: { category?: Category; onClose: () => void }) {
   const createCategory = useCreateCategory();
-  const [values, setValues] = useState<CategoryFormValues>({ name: '', description: '', isActive: true });
+  const updateCategory = useUpdateCategory();
+  const [values, setValues] = useState<CategoryFormValues>({
+    name: category?.name ?? '',
+    description: category?.description ?? '',
+    isActive: category?.isActive ?? true,
+  });
 
   return (
-    <ModalFrame title="Nova categoria" onClose={onClose}>
+    <ModalFrame title={category ? 'Editar categoria' : 'Nova categoria'} onClose={onClose}>
       <Field label="Nome da categoria">
         <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
       </Field>
-      <Field label="Descrição opcional">
+      <Field label="Descricao opcional">
         <Input value={values.description} onChange={(event) => setValues({ ...values, description: event.target.value })} />
       </Field>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={values.isActive} onChange={(event) => setValues({ ...values, isActive: event.target.checked })} />
-        Ativa
-      </label>
       <ModalActions
         onClose={onClose}
-        onSave={() => void createCategory.mutateAsync(values).then(onClose)}
+        onSave={() => void (category ? updateCategory.mutateAsync({ id: category.id, values }) : createCategory.mutateAsync(values)).then(onClose)}
       />
     </ModalFrame>
   );
 }
 
-function SupplierModal({ onClose }: { onClose: () => void }) {
+function SupplierModal({ supplier, onClose }: { supplier?: Supplier; onClose: () => void }) {
   const createSupplier = useCreateSupplier();
+  const updateSupplier = useUpdateSupplier();
   const [values, setValues] = useState<SupplierFormValues>({
-    name: '',
-    phone: '',
-    whatsapp: '',
-    documentNumber: '',
-    email: '',
-    address: '',
-    notes: '',
-    isActive: true,
+    name: supplier?.name ?? '',
+    phone: supplier?.phone ?? '',
+    whatsapp: supplier?.whatsapp ?? '',
+    documentNumber: supplier?.documentNumber ?? '',
+    email: supplier?.email ?? '',
+    address: supplier?.address ?? '',
+    notes: supplier?.notes ?? '',
+    isActive: supplier?.isActive ?? true,
   });
 
+  const normalized = {
+    ...values,
+    phone: sanitizePhone(values.phone),
+    whatsapp: sanitizePhone(values.whatsapp),
+    documentNumber: onlyDigits(values.documentNumber),
+  };
+
   return (
-    <ModalFrame title="Novo fornecedor" onClose={onClose}>
+    <ModalFrame title={supplier ? 'Editar fornecedor' : 'Novo fornecedor'} onClose={onClose}>
       <div className="grid gap-4 md:grid-cols-2">
         <Field label="Nome do fornecedor" className="md:col-span-2">
           <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} />
@@ -245,29 +310,16 @@ function SupplierModal({ onClose }: { onClose: () => void }) {
         <Field label="E-mail">
           <Input value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} />
         </Field>
-        <Field label="Endereço" className="md:col-span-2">
+        <Field label="Endereco" className="md:col-span-2">
           <Input value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} />
         </Field>
-        <Field label="Observações" className="md:col-span-2">
+        <Field label="Observacoes" className="md:col-span-2">
           <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
         </Field>
       </div>
-      <label className="flex items-center gap-2 text-sm">
-        <input type="checkbox" checked={values.isActive} onChange={(event) => setValues({ ...values, isActive: event.target.checked })} />
-        Ativo
-      </label>
       <ModalActions
         onClose={onClose}
-        onSave={() =>
-          void createSupplier
-            .mutateAsync({
-              ...values,
-              phone: sanitizePhone(values.phone),
-              whatsapp: sanitizePhone(values.whatsapp),
-              documentNumber: onlyDigits(values.documentNumber),
-            })
-            .then(onClose)
-        }
+        onSave={() => void (supplier ? updateSupplier.mutateAsync({ id: supplier.id, values: normalized }) : createSupplier.mutateAsync(normalized)).then(onClose)}
       />
     </ModalFrame>
   );

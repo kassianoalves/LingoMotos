@@ -18,6 +18,7 @@ pub fn open_database() -> AppResult<DatabaseConnection> {
     fs::create_dir_all(&backup_dir)?;
 
     let db_path = db_dir.join("lingomotos.sqlite3");
+    migrate_legacy_database_if_needed(&db_path)?;
     let connection = Connection::open(&db_path)?;
 
     connection.pragma_update(None, "journal_mode", "WAL")?;
@@ -35,14 +36,27 @@ pub fn open_database() -> AppResult<DatabaseConnection> {
 }
 
 pub fn resolve_app_dir() -> AppResult<PathBuf> {
-    let base_dir = dirs::data_local_dir().ok_or(AppError::DataDirectoryNotFound)?;
+    let base_dir = dirs::data_dir().ok_or(AppError::DataDirectoryNotFound)?;
     Ok(base_dir.join("LingoMotos"))
 }
 
 pub fn resolve_database_dir() -> AppResult<PathBuf> {
-    Ok(resolve_app_dir()?.join("data"))
+    resolve_app_dir()
 }
 
 pub fn resolve_backup_dir() -> AppResult<PathBuf> {
     Ok(resolve_app_dir()?.join("backups"))
+}
+
+fn migrate_legacy_database_if_needed(db_path: &PathBuf) -> AppResult<()> {
+    if db_path.exists() {
+        return Ok(());
+    }
+
+    let legacy_path = resolve_app_dir()?.join("data").join("lingomotos.sqlite3");
+    if legacy_path.exists() {
+        fs::copy(legacy_path, db_path)?;
+    }
+
+    Ok(())
 }

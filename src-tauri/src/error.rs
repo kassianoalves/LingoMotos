@@ -17,6 +17,15 @@ pub enum AppError {
 
     #[error("Backup invalido ou nao encontrado")]
     InvalidBackup,
+
+    #[error("URL externa invalida")]
+    InvalidExternalUrl,
+
+    #[error("Arquivo de logo invalido")]
+    InvalidLogoFile,
+
+    #[error("{0}")]
+    Validation(String),
 }
 
 #[derive(Debug, Serialize)]
@@ -36,6 +45,9 @@ impl serde::Serialize for AppError {
             AppError::DataDirectoryNotFound => "DATA_DIRECTORY_NOT_FOUND",
             AppError::StateUnavailable => "STATE_UNAVAILABLE",
             AppError::InvalidBackup => "INVALID_BACKUP",
+            AppError::InvalidExternalUrl => "INVALID_EXTERNAL_URL",
+            AppError::InvalidLogoFile => "INVALID_LOGO_FILE",
+            AppError::Validation(_) => "VALIDATION_ERROR",
         };
 
         SerializedError {

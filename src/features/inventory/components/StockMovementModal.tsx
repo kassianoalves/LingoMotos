@@ -3,7 +3,7 @@ import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import { useRegisterStockMovement } from '../queries/inventory.queries';
 import type { Product, StockMovementFormValues } from '../types/inventory.types';
-import { formatBrlInput, parseBrlToCents } from '@/utils/formatters';
+import { formatBRLInput, parseBRLInputToCents, sanitizeIntegerInput } from '@/utils/numberFormat';
 
 type StockMovementModalProps = {
   products: Product[];
@@ -19,7 +19,10 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
     movementType: 'purchase',
     direction: 'in',
     quantity: 1,
+    reason: '',
+    referenceId: '',
     unitCostCents: selectedProduct?.costPriceCents ?? 0,
+    unitPriceCents: selectedProduct?.salePriceCents ?? 0,
     notes: '',
   });
 
@@ -84,10 +87,10 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
               }
             >
               <option value="purchase">Compra</option>
-              <option value="adjustment_in">Ajuste entrada</option>
-              <option value="adjustment_out">Ajuste saída</option>
+              <option value="adjustment">Ajuste</option>
               <option value="loss">Perda</option>
               <option value="return">Retorno</option>
+              <option value="internal_use">Uso interno</option>
               <option value="initial_balance">Saldo inicial</option>
             </select>
           </label>
@@ -110,8 +113,11 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
             <span className="font-medium">Quantidade</span>
             <Input
               inputMode="numeric"
-              value={String(values.quantity)}
-              onChange={(event) => setValues({ ...values, quantity: Number(event.target.value.replace(/\D/g, '')) || 0 })}
+              value={values.quantity ? String(values.quantity) : ''}
+              onChange={(event) => {
+                const next = sanitizeIntegerInput(event.target.value);
+                setValues({ ...values, quantity: next ? Number(next) : 0 });
+              }}
             />
             {errors.quantity && <span className="text-xs text-destructive">{errors.quantity}</span>}
           </label>
@@ -120,9 +126,28 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
             <span className="font-medium">Custo unitário</span>
             <Input
               inputMode="decimal"
-              value={formatBrlInput((values.unitCostCents / 100).toFixed(2).replace('.', ','))}
-              onChange={(event) => setValues({ ...values, unitCostCents: parseBrlToCents(event.target.value) })}
+              value={values.unitCostCents ? String(values.unitCostCents / 100).replace('.', ',') : ''}
+              onChange={(event) => setValues({ ...values, unitCostCents: parseBRLInputToCents(formatBRLInput(event.target.value)) })}
             />
+          </label>
+
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Preco unitario</span>
+            <Input
+              inputMode="decimal"
+              value={values.unitPriceCents ? String(values.unitPriceCents / 100).replace('.', ',') : ''}
+              onChange={(event) => setValues({ ...values, unitPriceCents: parseBRLInputToCents(formatBRLInput(event.target.value)) })}
+            />
+          </label>
+
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Motivo</span>
+            <Input value={values.reason} onChange={(event) => setValues({ ...values, reason: event.target.value })} />
+          </label>
+
+          <label className="grid gap-2 text-sm">
+            <span className="font-medium">Referencia</span>
+            <Input value={values.referenceId} onChange={(event) => setValues({ ...values, referenceId: event.target.value })} />
           </label>
 
           <label className="grid gap-2 text-sm md:col-span-2">

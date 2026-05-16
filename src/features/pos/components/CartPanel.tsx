@@ -2,28 +2,26 @@ import { Minus, Plus, Trash2 } from 'lucide-react';
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
-import { Input } from '@shared/components/ui/input';
 import type { CartItem } from '../types/pos.types';
-import { formatCurrency, parseMoneyToCents } from '../utils/pos-calculations';
+import { formatCurrency } from '../utils/pos-calculations';
 
 type CartPanelProps = {
   items: CartItem[];
   onQuantityChange: (itemId: string, quantity: number) => void;
-  onDiscountChange: (itemId: string, discountCents: number) => void;
   onRemove: (itemId: string) => void;
 };
 
-export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove }: CartPanelProps) {
+export function CartPanel({ items, onQuantityChange, onRemove }: CartPanelProps) {
   return (
-    <Card className="h-full">
-      <CardHeader className="flex flex-row items-center justify-between">
+    <Card className="flex h-full min-h-0 flex-col">
+      <CardHeader className="flex flex-row items-center justify-between space-y-1 p-4 pb-2">
         <div>
           <CardTitle>Carrinho</CardTitle>
           <p className="text-sm text-muted-foreground">{items.length} itens na venda atual.</p>
         </div>
       </CardHeader>
-      <CardContent>
-        <div className="h-[520px] overflow-auto rounded-md border border-border">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-0">
+        <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
           {items.map((item) => {
             const lineTotal = Math.max(Math.round(item.quantity * item.unitPriceCents) - item.discountCents, 0);
 
@@ -46,12 +44,7 @@ export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove 
                     >
                       <Minus className="h-4 w-4" />
                     </Button>
-                    <Input
-                      inputMode="numeric"
-                      className="h-9 w-20 text-center"
-                      value={item.quantity}
-                      onChange={(event) => onQuantityChange(item.id, Number(event.target.value.replace(/\D/g, '')) || 0)}
-                    />
+                    <span className="min-w-10 text-center text-sm font-semibold">{item.quantity}</span>
                     <Button
                       variant="outline"
                       size="icon"
@@ -59,12 +52,6 @@ export function CartPanel({ items, onQuantityChange, onDiscountChange, onRemove 
                     >
                       <Plus className="h-4 w-4" />
                     </Button>
-                    <Input
-                      className="h-9 w-28"
-                      value={(item.discountCents / 100).toFixed(2).replace('.', ',')}
-                      onChange={(event) => onDiscountChange(item.id, parseMoneyToCents(event.target.value))}
-                      aria-label="Desconto do item"
-                    />
                   </div>
                 </div>
 

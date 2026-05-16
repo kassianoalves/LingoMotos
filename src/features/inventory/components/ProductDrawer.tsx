@@ -40,7 +40,7 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }
       <div className="flex h-16 items-center justify-between border-b border-border px-5">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{product.name}</p>
-          <p className="text-xs text-muted-foreground">{product.sku}</p>
+          <p className="text-xs text-muted-foreground">SKU / Código interno: {product.sku}</p>
         </div>
         <Button variant="ghost" size="icon" onClick={onClose} aria-label="Fechar detalhe">
           <X className="h-4 w-4" />
@@ -71,11 +71,26 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }
 
         <Card>
           <CardHeader>
+            <CardTitle>Campos personalizados</CardTitle>
+          </CardHeader>
+          <CardContent className="grid gap-3 text-sm">
+            {product.customFields.length === 0 && <p className="text-sm text-muted-foreground">Nenhum campo personalizado.</p>}
+            {product.customFields.map((field) => (
+              <Metric key={field.fieldKey} label={field.fieldLabel} value={formatCustomFieldValue(field.fieldType, field.fieldValue)} />
+            ))}
+          </CardContent>
+        </Card>
+
+        <Card>
+          <CardHeader>
           <CardTitle>Operação</CardTitle>
           </CardHeader>
           <CardContent className="grid gap-3 text-sm">
             <Metric label="Categoria" value={product.categoryName} />
             <Metric label="Fornecedor" value={product.supplierName ?? 'Sem fornecedor'} />
+            <Metric label="Código de barras" value={product.barcode ?? 'Não informado'} />
+            <Metric label="Marca" value={product.brand ?? 'Não informada'} />
+            <Metric label="Aplicação / Moto compatível" value={product.motorcycleApplication ?? 'Não informada'} />
             <Metric label="Localização" value={product.location ?? 'Sem local'} />
             <Metric label="Vendidos em 30 dias" value={`${product.soldLast30Days} itens`} />
             <Metric label="Última movimentação" value={formatDate(product.lastMovementAt)} />
@@ -104,4 +119,20 @@ function formatDate(value?: string) {
     dateStyle: 'short',
     timeStyle: 'short',
   }).format(new Date(value));
+}
+
+function formatCustomFieldValue(type: Product['customFields'][number]['fieldType'], value: string) {
+  if (!value) return '-';
+  if (type === 'currency') {
+    const cents = Math.round(Number(value.replace(/\./g, '').replace(',', '.')) * 100);
+    return Number.isFinite(cents) ? formatCurrency(cents) : value;
+  }
+  if (type === 'date') {
+    const date = new Date(value);
+    return Number.isNaN(date.getTime()) ? value : new Intl.DateTimeFormat('pt-BR').format(date);
+  }
+  if (type === 'boolean') {
+    return ['true', '1', 'sim', 's'].includes(value.toLocaleLowerCase('pt-BR')) ? 'Sim' : 'Não';
+  }
+  return value;
 }

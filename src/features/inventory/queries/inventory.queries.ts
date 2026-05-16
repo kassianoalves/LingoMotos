@@ -12,6 +12,7 @@ import type {
 export const inventoryQueryKeys = {
   all: ['inventory'] as const,
   list: (filters: InventoryFilters) => [...inventoryQueryKeys.all, 'list', filters] as const,
+  movements: ['inventory', 'movements'] as const,
 };
 
 export function useInventory(filters: InventoryFilters) {
@@ -55,6 +56,22 @@ export function useCreateCategory() {
   });
 }
 
+export function useUpdateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: CategoryFormValues }) => inventoryService.updateCategory(id, values),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all }),
+  });
+}
+
+export function useDeactivateCategory() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => inventoryService.deactivateCategory(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all }),
+  });
+}
+
 export function useCreateSupplier() {
   const queryClient = useQueryClient();
 
@@ -63,6 +80,29 @@ export function useCreateSupplier() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all });
     },
+  });
+}
+
+export function useUpdateSupplier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, values }: { id: string; values: SupplierFormValues }) => inventoryService.updateSupplier(id, values),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all }),
+  });
+}
+
+export function useDeactivateSupplier() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => inventoryService.deactivateSupplier(id),
+    onSuccess: () => void queryClient.invalidateQueries({ queryKey: inventoryQueryKeys.all }),
+  });
+}
+
+export function useStockMovements() {
+  return useQuery({
+    queryKey: inventoryQueryKeys.movements,
+    queryFn: () => inventoryService.listStockMovements(),
   });
 }
 

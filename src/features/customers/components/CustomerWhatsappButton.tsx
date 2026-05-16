@@ -10,6 +10,7 @@ type CustomerWhatsappButtonProps = {
   variant?: 'default' | 'secondary' | 'outline' | 'ghost' | 'destructive';
   size?: 'sm' | 'default' | 'lg' | 'icon';
   label?: string;
+  className?: string;
 };
 
 export function CustomerWhatsappButton({
@@ -19,6 +20,7 @@ export function CustomerWhatsappButton({
   variant = 'outline',
   size = 'sm',
   label = 'WhatsApp',
+  className,
 }: CustomerWhatsappButtonProps) {
   const phone = customer.whatsapp || customer.phone;
   const disabled = !isValidWhatsappPhone(phone);
@@ -30,11 +32,12 @@ export function CustomerWhatsappButton({
       size={size}
       title="Abrir WhatsApp"
       aria-label="Abrir WhatsApp"
+      className={className}
       disabled={disabled}
-      onClick={(event) => {
+      onClick={async (event) => {
         event.stopPropagation();
 
-        const result = openWhatsapp(phone, `Olá, ${customer.name}. Aqui é da LingoMotos.`);
+        const result = await openWhatsapp(phone, `Olá, ${customer.name}. Aqui é da LingoMotos.`);
 
         if (!result.ok) {
           onInvalidPhone();

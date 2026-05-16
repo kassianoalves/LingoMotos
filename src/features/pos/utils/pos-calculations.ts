@@ -1,11 +1,10 @@
-import type { CartItem, CartTotals, PaymentLine } from '../types/pos.types';
+import type { CartItem, CartTotals, PaymentLine, SaleDiscountInput } from '../types/pos.types';
 
 export const paymentMethodLabels = {
   cash: 'Dinheiro',
   pix: 'Pix',
   debit_card: 'Débito',
   credit_card: 'Crédito',
-  store_credit: 'Crediário',
 };
 
 export function formatCurrency(cents: number) {
@@ -15,9 +14,15 @@ export function formatCurrency(cents: number) {
   }).format(cents / 100);
 }
 
-export function calculateCartTotals(items: CartItem[], payments: PaymentLine[]): CartTotals {
+export function calculateCartTotals(items: CartItem[], payments: PaymentLine[], saleDiscount?: SaleDiscountInput): CartTotals {
   const subtotalCents = items.reduce((total, item) => total + Math.round(item.quantity * item.unitPriceCents), 0);
-  const discountCents = items.reduce((total, item) => total + item.discountCents, 0);
+  const itemDiscountCents = items.reduce((total, item) => total + item.discountCents, 0);
+  const saleDiscountCents = !saleDiscount
+    ? 0
+    : saleDiscount.type === 'value'
+      ? Math.max(saleDiscount.amountCents, 0)
+      : Math.max(Math.round((subtotalCents * saleDiscount.percentage) / 100), 0);
+  const discountCents = itemDiscountCents + saleDiscountCents;
   const totalCostCents = items.reduce((total, item) => total + Math.round(item.quantity * item.unitCostCents), 0);
   const totalCents = Math.max(subtotalCents - discountCents, 0);
   const grossProfitCents = totalCents - totalCostCents;
@@ -28,6 +33,8 @@ export function calculateCartTotals(items: CartItem[], payments: PaymentLine[]):
   return {
     subtotalCents,
     discountCents,
+    saleDiscountCents,
+    itemDiscountCents,
     totalCents,
     totalCostCents,
     grossProfitCents,

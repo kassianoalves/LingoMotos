@@ -1,8 +1,9 @@
 import { CheckCircle2, XCircle } from 'lucide-react';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
-import type { CartTotals, PosCheckoutResult } from '../types/pos.types';
-import { formatCurrency } from '../utils/pos-calculations';
+import type { CartTotals, PaymentLine, PosCheckoutResult, PosPaymentMethod, SaleDiscountInput } from '../types/pos.types';
+import { formatCurrency, paymentMethodLabels } from '../utils/pos-calculations';
+import { parseBRLInputToCents } from '@/utils/numberFormat';
 
 type SaleSummaryPanelProps = {
   totals: CartTotals;
@@ -10,7 +11,15 @@ type SaleSummaryPanelProps = {
   checkoutResult: PosCheckoutResult | null;
   onCheckout: () => void;
   onClear: () => void;
+  onGeneratePix: () => void;
   pending: boolean;
+  pixConfigured: boolean;
+  payments: PaymentLine[];
+  paymentMethod: PosPaymentMethod;
+  creditInstallments: number;
+  creditInterestRate: string;
+  paymentAmount?: string;
+  saleDiscount?: SaleDiscountInput;
 };
 
 export function SaleSummaryPanel({
@@ -19,56 +28,122 @@ export function SaleSummaryPanel({
   checkoutResult,
   onCheckout,
   onClear,
+  onGeneratePix,
   pending,
+  pixConfigured,
+  payments = [],
+  paymentMethod,
+  creditInstallments,
+  creditInterestRate,
+  paymentAmount = '',
+  saleDiscount,
 }: SaleSummaryPanelProps) {
+  const hasProducts = totals.subtotalCents > 0;
+  const paymentCents = parseBRLInputToCents(paymentAmount);
+  
+  // Usa o pagamento adicionado se existir, senão usa o input atual
+  const baseSubtotalCents = totals.paidCents > 0 ? totals.paidCents : (paymentCents > 0 ? paymentCents : totals.subtotalCents);
+  
+  // Se não há produtos mas há valor (recebido ou adicionado como pagamento) e desconto, calcular baseado nele
+  const displaySubtotalCents = !hasProducts && baseSubtotalCents > 0 ? baseSubtotalCents : totals.subtotalCents;
+  const displayDiscountCents = !hasProducts && baseSubtotalCents > 0 && saleDiscount?.type === 'percentage'
+    ? Math.round((baseSubtotalCents * (saleDiscount.percentage || 0)) / 100)
+    : totals.saleDiscountCents;
+  const liveInterestRate = Number(creditInterestRate.replace(',', '.'));
+  const draftCreditFeeCents =
+    paymentMethod === 'credit_card' && paymentCents > 0 && Number.isFinite(liveInterestRate) && liveInterestRate > 0
+      ? Math.round((paymentCents * liveInterestRate) / 100)
+      : 0;
+  const paymentCreditFeeCents = payments.reduce((total, payment) => {
+    if (payment.method !== 'credit_card') return total;
+    if (typeof payment.baseAmountCents !== 'number') return total;
+    return total + Math.max(payment.amountCents - payment.baseAmountCents, 0);
+  }, 0);
+  const creditFeeCents = draftCreditFeeCents + paymentCreditFeeCents;
+  const displayTotalCents = Math.max(displaySubtotalCents - displayDiscountCents + creditFeeCents, 0);
+
+  const paymentTypes = [...new Set(payments.map((payment) => {
+    const label = paymentMethodLabels[payment.method];
+
+    if (payment.method === 'credit_card' && payment.installments && payment.installments > 1) {
+      return `${label} ${payment.installments}x`;
+    }
+
+    return label;
+  }))];
+  const paymentTypeLabel = paymentTypes.length > 0 ? paymentTypes.join(' + ') : 'Não informado';
+  const lastCreditPayment = [...payments].reverse().find((payment) => payment.method === 'credit_card');
+  const installmentsLabel = paymentMethod === 'credit_card' ? `${creditInstallments}x` : `${lastCreditPayment?.installments ?? 1}x`;
+  
+  // Calcular pago e troco baseado no total com desconto
+  const paidCents = hasProducts ? totals.paidCents : (displayTotalCents > 0 ? displayTotalCents : 0);
+  const changeCents = Math.max(paidCents - displayTotalCents, 0);
+
   return (
-    <Card>
-      <CardHeader>
+    <Card className="flex min-h-0 flex-1 flex-col">
+      <CardHeader className="space-y-1 p-3 pb-2">
         <CardTitle>Resumo da venda</CardTitle>
       </CardHeader>
-      <CardContent className="space-y-3">
-        <Metric label="Subtotal" value={formatCurrency(totals.subtotalCents)} />
-        <Metric label="Descontos" value={formatCurrency(totals.discountCents)} />
-        <Metric label="Total" value={formatCurrency(totals.totalCents)} strong />
-        <Metric label="Lucro bruto" value={formatCurrency(totals.grossProfitCents)} />
-        <Metric label="Margem" value={`${totals.marginPercent.toFixed(1)}%`} />
-        <Metric label="Pago" value={formatCurrency(totals.paidCents)} />
-        <Metric label="Falta" value={formatCurrency(totals.remainingCents)} strong={totals.remainingCents > 0} />
-        <Metric label="Troco" value={formatCurrency(totals.changeCents)} />
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pt-0">
+        <div className="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
+          <div className="rounded-md border border-border bg-muted/20 p-4">
+            <div className="space-y-3 text-[15px]">
+              <SummaryRow label="Subtotal" value={formatCurrency(displaySubtotalCents)} />
+              <SummaryRow label="Desconto" value={formatCurrency(displayDiscountCents)} />
+              <SummaryRow label="Tipo de pagamento" value={paymentTypeLabel} />
+              <SummaryRow label="Parcelas" value={paymentMethod === 'credit_card' || paymentCreditFeeCents > 0 ? installmentsLabel : '1x'} />
+              <SummaryRow label="Taxa" value={formatCurrency(creditFeeCents)} />
 
-        {lastError && (
-          <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
-            <XCircle className="h-4 w-4" />
-            <span>{lastError}</span>
-          </div>
-        )}
+              <div className="my-2 border-t border-border/60" />
 
-        {checkoutResult && (
-          <div className="rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
-            <div className="flex items-center gap-2 font-medium">
-              <CheckCircle2 className="h-4 w-4" />
-              Venda {checkoutResult.saleNumber} finalizada
+              <SummaryRow label="Total" value={formatCurrency(displayTotalCents)} strong />
+
+              <div className="my-2 border-t border-border/60" />
+
+              <SummaryRow label="Pago" value={formatCurrency(paidCents)} />
+              <SummaryRow label="Troco" value={formatCurrency(changeCents)} />
             </div>
-            <p className="mt-1">
-              {formatCurrency(checkoutResult.totalCents)} · margem {checkoutResult.marginPercent.toFixed(1)}%
-            </p>
           </div>
-        )}
 
-        <div className="grid grid-cols-2 gap-2 pt-2">
-          <Button variant="outline" onClick={onClear}>Cancelar Esc</Button>
-          <Button onClick={onCheckout} disabled={pending}>Finalizar venda</Button>
+          {lastError && (
+            <div className="flex gap-2 rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">
+              <XCircle className="h-4 w-4" />
+              <span>{lastError}</span>
+            </div>
+          )}
+
+          {checkoutResult && (
+            <div className="space-y-3 rounded-md border border-success/30 bg-success/10 p-3 text-sm text-success">
+              <div className="flex items-center gap-2 font-medium">
+                <CheckCircle2 className="h-4 w-4" />
+                Venda {checkoutResult.saleNumber} finalizada
+              </div>
+              <p className="mt-1">
+                {formatCurrency(checkoutResult.totalCents)} - margem {checkoutResult.marginPercent.toFixed(1)}%
+              </p>
+              {pixConfigured ? (
+                <Button type="button" size="sm" onClick={onGeneratePix}>Gerar QR PIX</Button>
+              ) : (
+                <p className="text-xs">Configure a chave PIX nas Configuracoes da loja.</p>
+              )}
+            </div>
+          )}
+        </div>
+
+        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 bg-card pt-2">
+          <Button className="h-9 min-w-0 px-2" variant="outline" onClick={onClear}>Cancelar</Button>
+          <Button className="h-9 min-w-0 px-2" onClick={onCheckout} disabled={pending}>Finalizar venda</Button>
         </div>
       </CardContent>
     </Card>
   );
 }
 
-function Metric({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
+function SummaryRow({ label, value, strong }: { label: string; value: string; strong?: boolean }) {
   return (
-    <div className="flex items-center justify-between gap-4 text-sm">
-      <span className="text-muted-foreground">{label}</span>
-      <span className={strong ? 'text-lg font-semibold' : 'font-medium'}>{value}</span>
+    <div className="flex items-center justify-between gap-4">
+      <span className={strong ? 'font-semibold text-foreground' : 'text-muted-foreground'}>{label}</span>
+      <span className={strong ? 'text-base font-bold text-foreground' : 'font-semibold text-foreground'}>{value}</span>
     </div>
   );
 }

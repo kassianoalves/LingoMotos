@@ -1,6 +1,7 @@
 import type { Product } from '@features/inventory/types/inventory.types';
 
-export type PosPaymentMethod = 'cash' | 'pix' | 'debit_card' | 'credit_card' | 'store_credit';
+export type PosPaymentMethod = 'cash' | 'pix' | 'debit_card' | 'credit_card';
+export type PosDiscountType = 'value' | 'percentage';
 
 export type PosProduct = Pick<
   Product,
@@ -14,6 +15,8 @@ export type PosProduct = Pick<
   | 'salePriceCents'
   | 'currentStockQuantity'
   | 'location'
+  | 'supplierName'
+  | 'motorcycleApplication'
 >;
 
 export type CartItem = {
@@ -34,11 +37,16 @@ export type PaymentLine = {
   id: string;
   method: PosPaymentMethod;
   amountCents: number;
+  installments?: number;
+  interestRatePercent?: number;
+  baseAmountCents?: number;
 };
 
 export type CartTotals = {
   subtotalCents: number;
   discountCents: number;
+  saleDiscountCents: number;
+  itemDiscountCents: number;
   totalCents: number;
   totalCostCents: number;
   grossProfitCents: number;
@@ -47,6 +55,10 @@ export type CartTotals = {
   remainingCents: number;
   changeCents: number;
 };
+
+export type SaleDiscountInput =
+  | { type: 'value'; amountCents: number }
+  | { type: 'percentage'; percentage: number };
 
 export type PosCheckoutResult = {
   saleNumber: string;
@@ -60,4 +72,3 @@ export type PosValidationResult = {
   valid: boolean;
   errors: string[];
 };
-

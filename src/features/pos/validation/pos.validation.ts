@@ -25,6 +25,10 @@ export function validateCheckout(items: CartItem[], payments: PaymentLine[], tot
     errors.push('Informe uma forma de pagamento.');
   }
 
+  if (totals.discountCents > totals.subtotalCents) {
+    errors.push('Desconto maior que o subtotal da venda.');
+  }
+
   if (totals.paidCents < totals.totalCents) {
     errors.push('Pagamento menor que o total da venda.');
   }

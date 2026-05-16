@@ -9,9 +9,9 @@ type FinancePeriodFilterProps = {
 };
 
 const periods: Array<{ label: string; value: FinancePeriod }> = [
-  { label: 'Hoje', value: 'today' },
-  { label: 'Mes', value: 'month' },
-  { label: 'Trimestre', value: 'quarter' },
+  { label: 'Diario', value: 'today' },
+  { label: 'Semanal', value: 'week' },
+  { label: 'Mensal', value: 'month' },
 ];
 
 export function FinancePeriodFilter({ filters, onPeriodChange, onCustomPeriodChange }: FinancePeriodFilterProps) {
@@ -27,17 +27,17 @@ export function FinancePeriodFilter({ filters, onPeriodChange, onCustomPeriodCha
           {period.label}
         </Button>
       ))}
-      <div className="flex items-center gap-2 rounded-md border border-border bg-card p-1">
+      <div className="flex items-center gap-2 rounded-md bg-muted/40 p-1">
         <Input
           type="date"
-          className="h-8 w-36 border-0"
+          className="h-8 w-36 border-0 bg-transparent"
           value={filters.startDate}
           onChange={(event) => onCustomPeriodChange(event.target.value, filters.endDate)}
         />
         <span className="text-xs text-muted-foreground">ate</span>
         <Input
           type="date"
-          className="h-8 w-36 border-0"
+          className="h-8 w-36 border-0 bg-transparent"
           value={filters.endDate}
           onChange={(event) => onCustomPeriodChange(filters.startDate, event.target.value)}
         />
@@ -45,4 +45,3 @@ export function FinancePeriodFilter({ filters, onPeriodChange, onCustomPeriodCha
     </div>
   );
 }
-

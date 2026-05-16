@@ -14,7 +14,7 @@ type PosState = {
   removeItem: (itemId: string) => void;
   updateQuantity: (itemId: string, quantity: number) => void;
   updateDiscount: (itemId: string, discountCents: number) => void;
-  addPayment: (method: PosPaymentMethod, amountCents: number) => void;
+  addPayment: (method: PosPaymentMethod, amountCents: number, options?: { installments?: number; interestRatePercent?: number; baseAmountCents?: number }) => void;
   removePayment: (paymentId: string) => void;
   fillRemainingPayment: (method: PosPaymentMethod) => void;
   clearSale: () => void;
@@ -79,7 +79,7 @@ export const usePosStore = create<PosState>((set, get) => ({
         item.id === itemId ? { ...item, discountCents: Math.max(discountCents, 0) } : item,
       ),
     })),
-  addPayment: (method, amountCents) =>
+  addPayment: (method, amountCents, options) =>
     set((state) => ({
       payments: [
         ...state.payments,
@@ -87,6 +87,9 @@ export const usePosStore = create<PosState>((set, get) => ({
           id: crypto.randomUUID(),
           method,
           amountCents,
+          installments: options?.installments,
+          interestRatePercent: options?.interestRatePercent,
+          baseAmountCents: options?.baseAmountCents,
         },
       ],
     })),

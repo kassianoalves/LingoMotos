@@ -1,5 +1,5 @@
-import { useMemo, useState } from 'react';
-import { Edit, History, Plus, Search, ShoppingCart } from 'lucide-react';
+import { useEffect, useMemo, useState } from 'react';
+import { Edit, History, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
@@ -9,25 +9,60 @@ import { useCustomersStore } from '../stores/customers.store';
 import type { Customer } from '../types/customer.types';
 import { formatBrazilianPhone, sanitizePhone } from '../utils/customer-phone';
 import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
+import { usePosCustomerStore } from '@features/pos/stores/pos-customer.store';
+import { financeRepository } from '@features/finance/repositories/finance.repository';
+import { formatCurrency } from '@/utils/formatters';
+import { QrCodeModal } from '@shared/components/QrCodeModal';
+import { buildWhatsappUrl } from '@/utils/whatsapp';
 
 type ToastState = {
   message: string;
   tone: 'success' | 'error';
 };
 
-export function CustomersPage({ navigate }: { navigate: (route: string) => void }) {
+export function CustomersPage({ navigate, cashOpen }: { navigate: (route: string) => void; cashOpen: boolean }) {
   const customers = useCustomersStore((state) => state.customers);
   const selectedCustomer = useCustomersStore((state) => state.selectedCustomer);
   const search = useCustomersStore((state) => state.search);
   const setSearch = useCustomersStore((state) => state.setSearch);
   const selectCustomer = useCustomersStore((state) => state.selectCustomer);
   const saveCustomer = useCustomersStore((state) => state.saveCustomer);
+  const deleteCustomer = useCustomersStore((state) => state.deleteCustomer);
+  const loadCustomers = useCustomersStore((state) => state.loadCustomers);
+  const selectPosCustomer = usePosCustomerStore((state) => state.selectCustomer);
   const [editing, setEditing] = useState<Customer | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
+  const [customerSales, setCustomerSales] = useState<Array<{ id: string; saleNumber: string; totalCents: number }>>([]);
+  const [whatsappQr, setWhatsappQr] = useState<{ title: string; value: string } | null>(null);
+
+  useEffect(() => {
+    void loadCustomers();
+  }, [loadCustomers]);
+
+  useEffect(() => {
+    if (!selectedCustomer) {
+      setCustomerSales([]);
+      return;
+    }
+    void financeRepository.listCustomerSales(selectedCustomer.name).then(setCustomerSales);
+  }, [selectedCustomer]);
+
+  useEffect(() => {
+    function handleCreateCustomer() {
+      if (!cashOpen) {
+        showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
+        return;
+      }
+      setEditing(emptyCustomer());
+    }
+
+    window.addEventListener('customers:create', handleCreateCustomer);
+    return () => window.removeEventListener('customers:create', handleCreateCustomer);
+  }, [cashOpen]);
 
   function showToast(nextToast: ToastState) {
     setToast(nextToast);
-    window.setTimeout(() => setToast(null), 2400);
+    window.setTimeout(() => setToast(null), nextToast.tone === 'error' ? 4500 : 3000);
   }
 
   const whatsappActions = {
@@ -46,19 +81,8 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
   }, [customers, search]);
 
   return (
-    <div className="grid gap-6 p-6 xl:grid-cols-[minmax(0,1fr)_420px]">
+    <div className="grid gap-6 px-6 pb-6 pt-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
       <div className="space-y-4">
-        <div className="flex items-start justify-between gap-4">
-          <div>
-            <h2 className="text-xl font-semibold">Clientes</h2>
-            <p className="text-sm text-muted-foreground">Cadastro separado do início, pronto para histórico de compras.</p>
-          </div>
-          <Button onClick={() => setEditing(emptyCustomer())}>
-            <Plus className="h-4 w-4" />
-            Novo cliente
-          </Button>
-        </div>
-
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -72,18 +96,16 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
         <Card>
           <CardContent className="p-0">
             {filteredCustomers.map((customer) => (
-              <div
-                key={customer.id}
-                className="flex w-full items-center justify-between gap-4 border-b border-border p-4 text-left hover:bg-muted/50"
-              >
-                <button type="button" className="min-w-0 flex-1 text-left" onClick={() => selectCustomer(customer)}>
-                  <p className="font-medium">{customer.name}</p>
-                  <p className="text-sm text-muted-foreground">
-                    {formatBrazilianPhone(customer.phone) || 'Sem telefone'} · {customer.documentNumber || 'CPF/CNPJ opcional'}
+              <div key={customer.id} className="grid gap-3 border-b border-border p-4 hover:bg-muted/50">
+                <button type="button" className="min-w-0 text-left" onClick={() => selectCustomer(customer)}>
+                  <p className="truncate font-medium">{customer.name}</p>
+                  <p className="mt-1 truncate text-sm text-muted-foreground">
+                    {formatBrazilianPhone(customer.phone) || 'Sem telefone'}
                   </p>
+                  <p className="mt-1 text-xs text-muted-foreground">Última atualização: {customer.updatedAt}</p>
                 </button>
 
-                <div className="flex shrink-0 items-center gap-2">
+                <div className="flex flex-wrap items-center gap-2">
                   <Button
                     type="button"
                     size="sm"
@@ -99,9 +121,26 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
                     type="button"
                     size="sm"
                     variant="outline"
+                    title="QR WhatsApp"
+                    onClick={() => {
+                      const url = buildWhatsappUrl(customer.whatsapp || customer.phone, `Olá, ${customer.name}. Aqui é da LingoMotos.`);
+                      if (!url) {
+                        showToast({ tone: 'error', message: 'Telefone invalido.' });
+                        return;
+                      }
+                      setWhatsappQr({ title: `QR WhatsApp - ${customer.name}`, value: url });
+                    }}
+                  >
+                    QR WhatsApp
+                  </Button>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="outline"
                     title="Nova venda"
                     onClick={() => {
                       selectCustomer(customer);
+                      selectPosCustomer(customer);
                       navigate('/vendas');
                     }}
                   >
@@ -118,7 +157,29 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
                     <History className="h-4 w-4" />
                     Histórico
                   </Button>
-                  <Badge variant="secondary">{customer.updatedAt}</Badge>
+                  <Button
+                    type="button"
+                    size="sm"
+                    variant="destructive"
+                    title="Excluir cliente"
+                    disabled={!cashOpen}
+                    onClick={async () => {
+                      if (!cashOpen) {
+                        showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
+                        return;
+                      }
+                      if (!window.confirm(`Excluir cliente ${customer.name}? O historico de vendas sera preservado.`)) return;
+                      try {
+                        await deleteCustomer(customer.id);
+                        showToast({ tone: 'success', message: 'Cliente excluido com sucesso.' });
+                      } catch {
+                        showToast({ tone: 'error', message: 'Erro ao excluir cliente.' });
+                      }
+                    }}
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    Excluir
+                  </Button>
                 </div>
               </div>
             ))}
@@ -126,7 +187,7 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
         </Card>
       </div>
 
-      <Card>
+      <Card className="h-fit overflow-hidden">
         <CardHeader>
           <CardTitle>Detalhes do cliente</CardTitle>
         </CardHeader>
@@ -135,19 +196,52 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
             <>
               <div>
                 <p className="text-lg font-semibold">{selectedCustomer.name}</p>
-                <p className="text-sm text-muted-foreground">{selectedCustomer.documentNumber || 'Sem CPF/CNPJ'}</p>
               </div>
+              <Info label="CPF/CNPJ" value={formatCpfCnpj(selectedCustomer.documentNumber) || 'Não informado'} />
               <Info label="Telefone" value={formatBrazilianPhone(selectedCustomer.phone) || 'Não informado'} />
               <Info label="WhatsApp" value={formatBrazilianPhone(selectedCustomer.whatsapp) || 'Não informado'} />
               <Info label="E-mail" value={selectedCustomer.email || 'Não informado'} />
               <Info label="Endereço" value={selectedCustomer.address || 'Não informado'} />
               <Info label="Observações" value={selectedCustomer.notes || 'Sem observações'} />
               <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-                Histórico de compras será exibido aqui quando o módulo de vendas persistir no SQLite.
+                <p className="font-medium text-foreground">Histórico</p>
+                <div className="mt-2 space-y-2">
+                  {customerSales.map((sale) => (
+                    <div key={sale.id} className="flex items-center justify-between gap-3">
+                      <span>Venda {sale.saleNumber}</span>
+                      <span>{formatCurrency(sale.totalCents)}</span>
+                    </div>
+                  ))}
+                  {customerSales.length === 0 && (
+                    <p>Sem compras registradas.</p>
+                  )}
+                </div>
               </div>
-              <div className="flex gap-2">
-                <Button onClick={() => setEditing(selectedCustomer)}>Editar</Button>
-                <CustomerWhatsappButton customer={selectedCustomer} label="Abrir WhatsApp" size="default" {...whatsappActions} />
+              <div className="flex flex-wrap items-center justify-between gap-2">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Button className="min-w-fit" onClick={() => setEditing(selectedCustomer)}>Editar</Button>
+                  <CustomerWhatsappButton customer={selectedCustomer} label="Abrir WhatsApp" size="default" className="min-w-fit" {...whatsappActions} />
+                </div>
+                <Button
+                  variant="destructive"
+                  className="min-w-fit"
+                  disabled={!cashOpen}
+                  onClick={async () => {
+                    if (!cashOpen) {
+                      showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
+                      return;
+                    }
+                    if (!window.confirm(`Excluir cliente ${selectedCustomer.name}? O historico de vendas sera preservado.`)) return;
+                    try {
+                      await deleteCustomer(selectedCustomer.id);
+                      showToast({ tone: 'success', message: 'Cliente excluido com sucesso.' });
+                    } catch {
+                      showToast({ tone: 'error', message: 'Erro ao excluir cliente.' });
+                    }
+                  }}
+                >
+                  Excluir
+                </Button>
               </div>
             </>
           ) : (
@@ -160,14 +254,27 @@ export function CustomersPage({ navigate }: { navigate: (route: string) => void 
         <CustomerModal
           customer={editing}
           onClose={() => setEditing(null)}
-          onSave={(customer) => {
-            saveCustomer(sanitizeCustomer(customer));
+          onSave={async (customer) => {
+            if (!customer.id && !cashOpen) {
+              showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
+              return;
+            }
+            await saveCustomer(sanitizeCustomer(customer));
             setEditing(null);
           }}
         />
       )}
 
       {toast && <Toast message={toast.message} tone={toast.tone} />}
+      {whatsappQr && (
+        <QrCodeModal
+          title={whatsappQr.title}
+          description="Escaneie para abrir a conversa no WhatsApp."
+          value={whatsappQr.value}
+          fileName="whatsapp-cliente.svg"
+          onClose={() => setWhatsappQr(null)}
+        />
+      )}
     </div>
   );
 }

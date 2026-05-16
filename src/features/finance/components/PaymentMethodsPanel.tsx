@@ -1,4 +1,3 @@
-import { Badge } from '@shared/components/ui/badge';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
 import type { PaymentMethodSummary } from '../types/finance.types';
 import { formatCurrency } from '../utils/finance-calculations';
@@ -7,35 +6,36 @@ type PaymentMethodsPanelProps = {
   payments: PaymentMethodSummary[];
 };
 
+const preferredOrder = ['pix', 'cash', 'debit_card', 'credit_card'];
+
 export function PaymentMethodsPanel({ payments }: PaymentMethodsPanelProps) {
   const total = payments.reduce((sum, item) => sum + item.amountCents, 0) || 1;
+  const ordered = [...payments].sort((a, b) => preferredOrder.indexOf(a.type) - preferredOrder.indexOf(b.type));
 
   return (
-    <Card>
-      <CardHeader>
+    <Card className="border-0 shadow-sm">
+      <CardHeader className="pb-3">
         <CardTitle>Formas de pagamento</CardTitle>
-        <p className="text-sm text-muted-foreground">Quanto entrou por cada forma e o valor liquido.</p>
       </CardHeader>
       <CardContent className="space-y-4">
-        {payments.map((payment) => (
-          <div key={payment.type} className="space-y-2">
-            <div className="flex items-center justify-between gap-3">
-              <div>
-                <p className="text-sm font-medium">{payment.label}</p>
-                <p className="text-xs text-muted-foreground">{payment.count} vendas · taxas {formatCurrency(payment.feeCents)}</p>
+        {ordered.map((payment) => {
+          const percent = Math.round((payment.amountCents / total) * 100);
+          return (
+            <div key={payment.type} className="space-y-2">
+              <div className="flex items-center justify-between gap-3 text-sm">
+                <span className="font-medium">{payment.label}</span>
+                <span>{formatCurrency(payment.amountCents)}</span>
               </div>
-              <div className="text-right">
-                <p className="text-sm font-semibold">{formatCurrency(payment.amountCents)}</p>
-                <Badge variant="secondary">Liquido {formatCurrency(payment.netCents)}</Badge>
+              <div className="flex items-center gap-3">
+                <div className="h-2 flex-1 rounded-full bg-muted">
+                  <div className="h-2 rounded-full bg-primary" style={{ width: `${percent}%` }} />
+                </div>
+                <span className="w-10 text-right text-xs text-muted-foreground">{percent}%</span>
               </div>
             </div>
-            <div className="h-2 rounded-full bg-muted">
-              <div className="h-2 rounded-full bg-primary" style={{ width: `${(payment.amountCents / total) * 100}%` }} />
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </CardContent>
     </Card>
   );
 }
-

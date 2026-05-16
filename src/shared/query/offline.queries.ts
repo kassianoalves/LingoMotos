@@ -19,6 +19,9 @@ export function useBackups() {
   return useQuery({
     queryKey: offlineQueryKeys.backups(),
     queryFn: () => offlineService.listBackups(),
+    staleTime: 60_000,
+    refetchOnWindowFocus: false,
+    refetchOnReconnect: false,
   });
 }
 
@@ -26,9 +29,10 @@ export function useCreateBackup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: () => offlineService.createBackup(),
+    mutationFn: (password: string) => offlineService.createBackup(password),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.all });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.backups() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.status() });
     },
   });
 }
@@ -37,10 +41,22 @@ export function useRestoreBackup() {
   const queryClient = useQueryClient();
 
   return useMutation({
-    mutationFn: (backupPath: string) => offlineService.restoreBackup(backupPath),
+    mutationFn: ({ backupPath, password }: { backupPath: string; password: string }) => offlineService.restoreBackup(backupPath, password),
     onSuccess: () => {
-      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.all });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.backups() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.status() });
     },
   });
 }
 
+export function useDeleteBackup() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: ({ backupPath, password }: { backupPath: string; password: string }) => offlineService.deleteBackup(backupPath, password),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.backups() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.status() });
+    },
+  });
+}

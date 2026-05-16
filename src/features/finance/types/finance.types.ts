@@ -1,4 +1,4 @@
-export type FinancePeriod = 'today' | 'month' | 'quarter' | 'custom';
+export type FinancePeriod = 'today' | 'week' | 'month' | 'custom';
 
 export type PaymentMethodType = 'cash' | 'pix' | 'debit_card' | 'credit_card' | 'bank_transfer' | 'other';
 
@@ -31,24 +31,34 @@ export type CashFlowRecord = {
   amountCents: number;
   paymentMethod: PaymentMethodType;
   status: 'pending' | 'confirmed' | 'cancelled';
+  source?: 'sale' | 'manual_revenue' | 'manual_expense' | 'adjustment';
 };
 
 export type PayableRecord = {
   id: string;
-  supplierName: string;
   description: string;
+  categoryType: string;
   dueDate: string;
   amountCents: number;
+  companyOrSupplier: string;
+  recurrenceType: 'unique' | 'monthly';
   status: 'open' | 'paid' | 'overdue';
+  paidAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type ReceivableRecord = {
   id: string;
-  customerName: string;
   description: string;
+  customer: string;
   dueDate: string;
   amountCents: number;
+  recurrenceType: 'unique' | 'monthly';
   status: 'open' | 'received' | 'overdue';
+  receivedAt?: string | null;
+  createdAt?: string;
+  updatedAt?: string;
 };
 
 export type PaymentMethodSummary = {
@@ -67,6 +77,15 @@ export type DailyPerformancePoint = {
   cashNetCents: number;
 };
 
+export type TopSellingCategory = {
+  categoryId: string | null;
+  categoryName: string;
+  quantitySold: number;
+  revenueTotalCents: number;
+  grossProfitCents: number;
+  percentage: number;
+};
+
 export type FinanceSummary = {
   revenueTodayCents: number;
   revenueMonthCents: number;
@@ -80,6 +99,9 @@ export type FinanceSummary = {
   payableOpenCents: number;
   receivableOpenCents: number;
   storePerformancePercent: number;
+  expensesTotalCents?: number;
+  estimatedNetProfitCents?: number;
+  costOfGoodsSoldCents?: number;
 };
 
 export type FinanceReport = {
@@ -89,3 +111,14 @@ export type FinanceReport = {
   status: 'good' | 'attention' | 'critical';
 };
 
+export type FinancialGoal = {
+  id: string;
+  name: string;
+  type: 'weekly' | 'monthly';
+  targetAmountCents: number;
+  startDate: string;
+  endDate: string;
+  isActive: boolean;
+  createdAt?: string;
+  updatedAt?: string;
+};

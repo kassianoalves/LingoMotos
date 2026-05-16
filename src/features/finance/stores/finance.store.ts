@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import type { FinanceFilters, FinancePeriod } from '../types/finance.types';
+import { getCurrentMonthRange, getCurrentWeekRange, getCustomRange, getTodayRange } from '@/utils/dateRange';
 
 type FinanceState = {
   filters: FinanceFilters;
@@ -7,12 +8,9 @@ type FinanceState = {
   setCustomPeriod: (startDate: string, endDate: string) => void;
 };
 
-const today = '2026-05-14';
-
 export const defaultFinanceFilters: FinanceFilters = {
   period: 'today',
-  startDate: today,
-  endDate: today,
+  ...getTodayRange(),
 };
 
 export const useFinanceStore = create<FinanceState>((set) => ({
@@ -25,21 +23,34 @@ export const useFinanceStore = create<FinanceState>((set) => ({
     set({
       filters: {
         period: 'custom',
-        startDate,
-        endDate,
+        ...clampCustomRange(startDate, endDate),
       },
     }),
 }));
 
 function buildPeriod(period: FinancePeriod): FinanceFilters {
-  if (period === 'month') {
-    return { period, startDate: '2026-05-01', endDate: today };
+  if (period === 'week') {
+    return { period, ...getCurrentWeekRange() };
   }
 
-  if (period === 'quarter') {
-    return { period, startDate: '2026-04-01', endDate: today };
+  if (period === 'month') {
+    return { period, ...getCurrentMonthRange() };
   }
 
   return defaultFinanceFilters;
 }
 
+function clampCustomRange(startDate: string, endDate: string) {
+  const normalized = getCustomRange(startDate, endDate);
+  const start = new Date(`${normalized.startDate}T00:00:00`);
+  const end = new Date(`${normalized.endDate}T00:00:00`);
+  if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime()) || end < start) {
+    return normalized;
+  }
+
+  const maxEnd = new Date(start);
+  maxEnd.setMonth(maxEnd.getMonth() + 2);
+  return end > maxEnd
+    ? { startDate: normalized.startDate, endDate: maxEnd.toISOString().slice(0, 10) }
+    : normalized;
+}

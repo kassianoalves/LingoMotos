@@ -5,12 +5,15 @@ const columnAliases: Record<Exclude<ImportColumnKey, 'ignore'>, string[]> = {
   barcode: ['barcode', 'codigo de barras', 'ean', 'gtin', 'cod barras'],
   name: ['nome', 'produto', 'descricao', 'descrição', 'item'],
   category: ['categoria', 'grupo', 'departamento', 'linha'],
-  supplier: ['fornecedor', 'marca', 'fabricante'],
+  supplier: ['fornecedor', 'fabricante'],
+  brand: ['marca'],
+  motorcycleApplication: ['aplicacao', 'aplicação', 'veiculo', 'modelo'],
   costPrice: ['custo', 'preco custo', 'preço custo', 'valor custo', 'compra'],
   salePrice: ['venda', 'preco venda', 'preço venda', 'valor venda', 'preco', 'preço'],
   currentStock: ['estoque', 'saldo', 'qtd', 'quantidade', 'quant'],
   minStock: ['minimo', 'mínimo', 'estoque minimo', 'estoque mínimo'],
   location: ['local', 'localizacao', 'localização', 'prateleira', 'endereco', 'endereçamento'],
+  notes: ['observacao', 'observação', 'observacoes', 'observações', 'obs', 'notas'],
   unit: ['unidade', 'un', 'medida'],
 };
 
@@ -37,7 +40,10 @@ export function autoMapColumns(headers: string[]): ImportColumnMapping {
       aliases.some((alias) => normalizedHeader.includes(normalizeHeader(alias))),
     );
 
-    mapping[header] = (match?.[0] as ImportColumnKey | undefined) ?? 'ignore';
+    mapping[header] = {
+      kind: 'known',
+      field: (match?.[0] as ImportColumnKey | undefined) ?? 'ignore',
+    };
     return mapping;
   }, {});
 }
@@ -57,7 +63,7 @@ async function parseWorkbook(buffer: ArrayBuffer, fileName: string): Promise<Imp
 }
 
 function parseCsv(text: string, fileName: string): ImportSourceData {
-  const rows = parseCsvRows(text);
+  const rows = parseCsvRows(stripBom(text), detectDelimiter(text));
   return matrixToSource(rows, fileName);
 }
 
@@ -79,7 +85,7 @@ function matrixToSource(matrix: Array<Array<string | number | null>>, fileName: 
   };
 }
 
-function parseCsvRows(text: string) {
+function parseCsvRows(text: string, delimiter: ',' | ';') {
   const rows: string[][] = [];
   let current = '';
   let row: string[] = [];
@@ -100,7 +106,7 @@ function parseCsvRows(text: string) {
       continue;
     }
 
-    if (char === ',' && !quoted) {
+    if (char === delimiter && !quoted) {
       row.push(current);
       current = '';
       continue;
@@ -123,6 +129,38 @@ function parseCsvRows(text: string) {
   row.push(current);
   rows.push(row);
   return rows;
+}
+
+function stripBom(text: string) {
+  return text.replace(/^\uFEFF/, '');
+}
+
+function detectDelimiter(text: string): ',' | ';' {
+  const firstLine = stripBom(text).split(/\r?\n/, 1)[0] ?? '';
+  const semicolons = countDelimiter(firstLine, ';');
+  const commas = countDelimiter(firstLine, ',');
+  return semicolons >= commas ? ';' : ',';
+}
+
+function countDelimiter(value: string, delimiter: ',' | ';') {
+  let count = 0;
+  let quoted = false;
+  for (let index = 0; index < value.length; index += 1) {
+    const char = value[index];
+    const next = value[index + 1];
+    if (char === '"' && quoted && next === '"') {
+      index += 1;
+      continue;
+    }
+    if (char === '"') {
+      quoted = !quoted;
+      continue;
+    }
+    if (char === delimiter && !quoted) {
+      count += 1;
+    }
+  }
+  return count;
 }
 
 function normalizeHeader(value: string) {

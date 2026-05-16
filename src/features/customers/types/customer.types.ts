@@ -9,3 +9,7 @@ export type Customer = {
   notes: string;
   updatedAt: string;
 };
+
+export type CustomerInput = Omit<Customer, 'updatedAt'> & {
+  id?: string;
+};

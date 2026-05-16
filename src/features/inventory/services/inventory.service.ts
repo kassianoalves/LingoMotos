@@ -53,9 +53,24 @@ export const inventoryService = {
   createCategory(values: CategoryFormValues) {
     return inventoryRepository.createCategory(values);
   },
+  updateCategory(id: string, values: CategoryFormValues) {
+    return inventoryRepository.updateCategory(id, values);
+  },
+  deactivateCategory(id: string) {
+    return inventoryRepository.deactivateCategory(id);
+  },
 
   createSupplier(values: SupplierFormValues) {
     return inventoryRepository.createSupplier(values);
+  },
+  updateSupplier(id: string, values: SupplierFormValues) {
+    return inventoryRepository.updateSupplier(id, values);
+  },
+  deactivateSupplier(id: string) {
+    return inventoryRepository.deactivateSupplier(id);
+  },
+  listStockMovements() {
+    return inventoryRepository.listStockMovements();
   },
 
   removeProduct(productId: string) {
@@ -90,22 +105,36 @@ export const inventoryService = {
     const existingByBarcode = new Map(
       products.filter((product) => product.barcode).map((product) => [normalize(product.barcode ?? ''), product]),
     );
+    const existingByName = new Map(products.map((product) => [normalize(product.name), product]));
     const seenInFile = new Set<string>();
 
-    const drafts = source.rows.map((row, index) => {
-      const mappedValues = mapRowToProduct(row, mapping, categories, suppliers);
+    const reservedSkus = new Set(products.map((product) => normalize(product.sku)));
+    const drafts = [];
+
+    for (const [index, row] of source.rows.entries()) {
+      let mappedValues = mapRowToProduct(row, mapping, categories, suppliers);
+      let skuGeneratedAutomatically = false;
+      if (!mappedValues.sku && mappedValues.name) {
+        mappedValues = {
+          ...mappedValues,
+          sku: await generateReservedSku(mappedValues, reservedSkus),
+        };
+        skuGeneratedAutomatically = true;
+      }
       const errors: string[] = [];
       const warnings: string[] = [];
       const rowNumber = index + 2;
       const fileKey = normalize(mappedValues.sku || mappedValues.barcode);
-      const duplicateProduct = existingBySku.get(normalize(mappedValues.sku)) || existingByBarcode.get(normalize(mappedValues.barcode));
+      const duplicateProduct = existingBySku.get(normalize(mappedValues.sku))
+        || existingByBarcode.get(normalize(mappedValues.barcode))
+        || existingByName.get(normalize(mappedValues.name));
       const values =
         duplicateProduct && options.duplicateStrategy === 'update_prices'
           ? mergePriceUpdate(duplicateProduct, mappedValues)
           : mappedValues;
 
       if (!values.sku) {
-        errors.push('SKU obrigatorio.');
+        errors.push('SKU / Código interno obrigatório.');
       }
 
       if (!values.name) {
@@ -128,8 +157,16 @@ export const inventoryService = {
         errors.push('Duplicado dentro do arquivo.');
       }
 
+      const customKeys = mappedValues.customFields.map((field) => normalize(field.fieldKey)).filter(Boolean);
+      if (new Set(customKeys).size !== customKeys.length) {
+        errors.push('Campos personalizados duplicados na mesma linha.');
+      }
+
       if (fileKey) {
         seenInFile.add(fileKey);
+      }
+      if (mappedValues.sku) {
+        reservedSkus.add(normalize(mappedValues.sku));
       }
 
       const action: ProductImportDraft['action'] =
@@ -141,7 +178,7 @@ export const inventoryService = {
               ? 'update'
               : 'create';
 
-      return {
+      drafts.push({
         rowNumber,
         raw: row,
         values,
@@ -149,8 +186,9 @@ export const inventoryService = {
         duplicateProductId: duplicateProduct?.id,
         errors,
         warnings: duplicateProduct ? ['Produto ja existe no cadastro.', ...warnings] : warnings,
-      };
-    });
+        skuGeneratedAutomatically,
+      });
+    }
 
     return {
       fileName: source.fileName,
@@ -167,6 +205,10 @@ export const inventoryService = {
   importProducts(request: ProductImportRequest) {
     return inventoryRepository.importProducts(request);
   },
+
+  generateProductSku(input: { categoryId?: string; brand?: string; productName: string; motorcycleApplication?: string }) {
+    return inventoryRepository.generateProductSku(input);
+  },
 };
 
 function mapRowToProduct(
@@ -174,13 +216,22 @@ function mapRowToProduct(
   mapping: ImportColumnMapping,
   categories: Awaited<ReturnType<typeof inventoryRepository.listCategories>>,
   suppliers: Awaited<ReturnType<typeof inventoryRepository.listSuppliers>>,
-): ProductFormValues {
+): ProductImportDraft['values'] {
   const mapped = Object.entries(mapping).reduce<Record<string, string>>((result, [header, target]) => {
-    if (target !== 'ignore') {
-      result[target] = row[header] ?? '';
+    if (target.kind === 'known' && target.field !== 'ignore') {
+      result[target.field] = row[header] ?? '';
     }
     return result;
   }, {});
+  const customFields = Object.entries(mapping)
+    .filter(([, target]) => target.kind === 'custom')
+    .map(([header, target]) => ({
+      fieldKey: target.kind === 'custom' ? target.fieldKey : '',
+      fieldLabel: target.kind === 'custom' ? target.fieldLabel : '',
+      fieldType: target.kind === 'custom' ? target.fieldType : 'text',
+      fieldValue: row[header] ?? '',
+    }))
+    .filter((field) => field.fieldKey && field.fieldLabel);
 
   const category = categories.find((item) => normalize(item.id) === normalize(mapped.category) || normalize(item.name) === normalize(mapped.category));
   const supplier = suppliers.find((item) => normalize(item.id) === normalize(mapped.supplier) || normalize(item.name) === normalize(mapped.supplier));
@@ -190,29 +241,61 @@ function mapRowToProduct(
     barcode: mapped.barcode?.trim() ?? '',
     name: mapped.name?.trim() ?? '',
     categoryId: category?.id ?? categories[0]?.id ?? '',
+    categoryName: mapped.category?.trim() ?? '',
     supplierId: supplier?.id ?? '',
+    supplierName: mapped.supplier?.trim() ?? '',
+    brand: mapped.brand?.trim() ?? '',
+    motorcycleApplication: mapped.motorcycleApplication?.trim() ?? '',
     location: mapped.location?.trim() ?? '',
+    notes: mapped.notes?.trim() ?? '',
     unit: mapped.unit?.trim() || 'un',
     costPriceCents: parseMoneyToCents(mapped.costPrice),
     salePriceCents: parseMoneyToCents(mapped.salePrice),
     currentStockQuantity: parseNumber(mapped.currentStock),
     minStockQuantity: parseNumber(mapped.minStock),
+    customFields,
   };
 }
 
-function mergePriceUpdate(product: Product, imported: ProductFormValues): ProductFormValues {
+async function generateReservedSku(
+  values: ProductImportDraft['values'],
+  reservedSkus: Set<string>,
+) {
+  const firstCandidate = await inventoryRepository.generateProductSku({
+    categoryId: values.categoryId || undefined,
+    brand: values.brand || undefined,
+    productName: values.name,
+    motorcycleApplication: values.motorcycleApplication || undefined,
+  });
+  let candidate = firstCandidate;
+  let sequence = Number(firstCandidate.match(/-(\d{4})$/)?.[1] ?? 1);
+  const base = firstCandidate.replace(/-\d{4}$/, '');
+  while (reservedSkus.has(normalize(candidate))) {
+    sequence += 1;
+    candidate = `${base}-${String(sequence).padStart(4, '0')}`;
+  }
+  return candidate;
+}
+
+function mergePriceUpdate(product: Product, imported: ProductImportDraft['values']): ProductImportDraft['values'] {
   return {
     sku: product.sku,
     barcode: product.barcode ?? imported.barcode,
     name: product.name,
     categoryId: product.categoryId,
+    categoryName: imported.categoryName,
     supplierId: product.supplierId ?? imported.supplierId,
+    supplierName: imported.supplierName,
+    brand: product.brand ?? imported.brand,
+    motorcycleApplication: product.motorcycleApplication ?? imported.motorcycleApplication,
     location: product.location ?? imported.location,
+    notes: product.notes ?? imported.notes,
     unit: product.unit,
     costPriceCents: imported.costPriceCents || product.costPriceCents,
     salePriceCents: imported.salePriceCents || product.salePriceCents,
     minStockQuantity: product.minStockQuantity,
     currentStockQuantity: product.currentStockQuantity,
+    customFields: imported.customFields,
   };
 }
 

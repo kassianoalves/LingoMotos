@@ -60,8 +60,8 @@ export function ProductVirtualTable({ products, selectedProductId, onSelectProdu
       </CardHeader>
       <CardContent>
         <div className="overflow-hidden rounded-md border border-border">
-          <div className="grid h-10 grid-cols-[128px_minmax(260px,1.4fr)_120px_96px_112px_112px_96px_120px] items-center border-b border-border bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
-            <div>SKU</div>
+          <div className="grid h-10 grid-cols-[minmax(180px,240px)_minmax(260px,1.4fr)_120px_96px_112px_112px_96px_120px] items-center gap-x-4 border-b border-border bg-muted/50 px-3 text-xs font-medium text-muted-foreground">
+            <div>SKU / Código interno</div>
             <div>Produto</div>
             <div>Categoria</div>
             <div>Estoque</div>
@@ -88,15 +88,15 @@ export function ProductVirtualTable({ products, selectedProductId, onSelectProdu
                       key={product.id}
                       type="button"
                       className={[
-                        'grid w-full grid-cols-[128px_minmax(260px,1.4fr)_120px_96px_112px_112px_96px_120px] items-center border-b border-border px-3 text-left text-sm transition-colors hover:bg-muted/50',
+                        'grid w-full grid-cols-[minmax(180px,240px)_minmax(260px,1.4fr)_120px_96px_112px_112px_96px_120px] items-center gap-x-4 border-b border-border px-3 text-left text-sm transition-colors hover:bg-muted/50',
                         selected ? 'bg-accent text-accent-foreground' : 'bg-card',
                       ].join(' ')}
                       style={{ height: rowHeight }}
                       onClick={() => onSelectProduct(product)}
                     >
-                      <div className="font-medium">{product.sku}</div>
+                      <div className="truncate font-medium" title={product.sku}>{product.sku}</div>
                       <div className="min-w-0">
-                        <p className="truncate font-medium">{product.name}</p>
+                        <p className="truncate font-medium" title={product.name}>{product.name}</p>
                         <p className="truncate text-xs text-muted-foreground">
                           {product.barcode ?? 'Sem codigo'} · {product.location ?? 'Sem local'}
                         </p>
