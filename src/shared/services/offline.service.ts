@@ -1,5 +1,5 @@
 import { serviceClient } from '@shared/api/service-client';
-import type { BackupInfo, OfflineStatus } from '@shared/types/offline.types';
+import type { BackupInfo, BackupMaintenance, OfflineStatus } from '@shared/types/offline.types';
 
 export const offlineService = {
   status() {
@@ -12,6 +12,26 @@ export const offlineService = {
 
   listBackups() {
     return serviceClient.execute<BackupInfo[]>('list_database_backups');
+  },
+
+  ensureAutoBackup() {
+    return serviceClient.execute<BackupMaintenance>('ensure_auto_backup');
+  },
+
+  getAutoBackupIntervalHours() {
+    return serviceClient.execute<number>('get_auto_backup_interval_hours');
+  },
+
+  setAutoBackupIntervalHours(intervalHours: number) {
+    return serviceClient.execute<number, { intervalHours: number }>('set_auto_backup_interval_hours', { intervalHours });
+  },
+
+  cleanupOldAutoBackups() {
+    return serviceClient.execute<number>('cleanup_old_auto_backups');
+  },
+
+  openBackupFolder() {
+    return serviceClient.execute<void>('open_backup_folder');
   },
 
   restoreBackup(backupPath: string, password: string) {

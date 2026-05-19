@@ -5,6 +5,7 @@ export const offlineQueryKeys = {
   all: ['offline'] as const,
   status: () => [...offlineQueryKeys.all, 'status'] as const,
   backups: () => [...offlineQueryKeys.all, 'backups'] as const,
+  autoBackupInterval: () => [...offlineQueryKeys.all, 'auto-backup-interval'] as const,
 };
 
 export function useOfflineStatus() {
@@ -22,6 +23,25 @@ export function useBackups() {
     staleTime: 60_000,
     refetchOnWindowFocus: false,
     refetchOnReconnect: false,
+  });
+}
+
+export function useAutoBackupInterval() {
+  return useQuery({
+    queryKey: offlineQueryKeys.autoBackupInterval(),
+    queryFn: () => offlineService.getAutoBackupIntervalHours(),
+    staleTime: 60_000,
+  });
+}
+
+export function useSaveAutoBackupInterval() {
+  const queryClient = useQueryClient();
+
+  return useMutation({
+    mutationFn: (intervalHours: number) => offlineService.setAutoBackupIntervalHours(intervalHours),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.autoBackupInterval() });
+    },
   });
 }
 

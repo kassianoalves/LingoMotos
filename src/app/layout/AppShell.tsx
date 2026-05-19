@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { clsx } from 'clsx';
 import {
   BarChart3,
@@ -29,11 +29,15 @@ import { useCashSessionStore } from '@shared/stores/cash-session.store';
 import { useThemeStore } from '@shared/stores/theme.store';
 import { useStoreSettingsStore } from '@shared/stores/store-settings.store';
 import { serviceClient } from '@shared/api/service-client';
+import { offlineService } from '@shared/services/offline.service';
+import { updaterService, type PendingUpdate } from '@shared/services/updater.service';
+import { relaunch } from '@tauri-apps/plugin-process';
 import { HomePage } from '@app/pages/HomePage';
 import { ReportsPage } from '@app/pages/ReportsPage';
 import { SettingsPage } from '@app/pages/SettingsPage';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { MasterPasswordVerifyModal } from '@shared/components/security/MasterPasswordModal';
+import { UpdateAvailableModal } from '@shared/components/updater/UpdateAvailableModal';
 
 type AppRoute = {
   path: string;
@@ -56,6 +60,7 @@ const routes: AppRoute[] = [
 ];
 
 export function AppShell() {
+  const autoBackupTimerRef = useRef<number | null>(null);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useAppShellStore((state) => state.toggleSidebar);
   const theme = useThemeStore((state) => state.theme);
@@ -70,6 +75,10 @@ export function AppShell() {
   const [cashAction, setCashAction] = useState<'open' | 'close' | null>(null);
   const [toast, setToast] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [appVersion, setAppVersion] = useState('');
+  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
+  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [updateInstallStatus, setUpdateInstallStatus] = useState('');
+  const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
   const activeRoute = routes.find((route) => route.path === activePath) ?? routes[0];
 
   useEffect(() => {
@@ -79,6 +88,47 @@ export function AppShell() {
 
   useEffect(() => {
     void serviceClient.execute<string>('app_version').then(setAppVersion).catch(() => setAppVersion('0.1.5'));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function runAutoBackupCheck() {
+      try {
+        const result = await offlineService.ensureAutoBackup();
+        if (cancelled) return;
+        if (result.backup_created) {
+          setToast({ tone: 'success', message: 'Backup automático criado.' });
+          window.dispatchEvent(new CustomEvent('lingomotos:backup-created'));
+        }
+        scheduleNextAutoBackupCheck(result.next_check_after_ms);
+      } catch {
+        if (cancelled) return;
+        setToast({ tone: 'error', message: 'Falha ao criar backup automático.' });
+        scheduleNextAutoBackupCheck(60 * 60 * 1_000);
+      }
+    }
+
+    function scheduleNextAutoBackupCheck(delayMs: number) {
+      if (autoBackupTimerRef.current) {
+        window.clearTimeout(autoBackupTimerRef.current);
+      }
+      autoBackupTimerRef.current = window.setTimeout(() => void runAutoBackupCheck(), Math.max(delayMs, 60_000));
+    }
+
+    const handleIntervalChanged = () => void runAutoBackupCheck();
+
+    void runAutoBackupCheck();
+    window.addEventListener('lingomotos:auto-backup-interval-changed', handleIntervalChanged);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('lingomotos:auto-backup-interval-changed', handleIntervalChanged);
+      if (autoBackupTimerRef.current) {
+        window.clearTimeout(autoBackupTimerRef.current);
+        autoBackupTimerRef.current = null;
+      }
+    };
   }, []);
 
   useEffect(() => {
@@ -101,6 +151,58 @@ export function AppShell() {
 
   async function toggleCashSession() {
     setCashAction(isCashOpen ? 'close' : 'open');
+  }
+
+  async function checkForUpdate() {
+    setIsCheckingUpdate(true);
+    setToast({ tone: 'success', message: 'Verificando atualização...' });
+
+    try {
+      const update = await updaterService.checkForUpdate();
+      if (!update) {
+        setToast({ tone: 'success', message: 'Sistema atualizado.' });
+        return;
+      }
+
+      setPendingUpdate(update);
+      setToast({ tone: 'success', message: `Nova versão disponível: v${update.version}` });
+    } catch {
+      setToast({ tone: 'success', message: 'Sem conexão. O sistema continua funcionando offline.' });
+    } finally {
+      setIsCheckingUpdate(false);
+    }
+  }
+
+  async function installPendingUpdate() {
+    if (!pendingUpdate) return;
+
+    setIsInstallingUpdate(true);
+    setUpdateInstallStatus('Criando backup automático...');
+    try {
+      await updaterService.createAutomaticBackup();
+    } catch {
+      setToast({ tone: 'error', message: 'Não foi possível criar o backup automático. Atualização cancelada.' });
+      setIsInstallingUpdate(false);
+      setUpdateInstallStatus('');
+      return;
+    }
+
+    try {
+      setUpdateInstallStatus('Baixando atualização...');
+      setToast({ tone: 'success', message: 'Baixando atualização...' });
+      await updaterService.downloadUpdate(pendingUpdate);
+      setUpdateInstallStatus('Instalando atualização...');
+      setToast({ tone: 'success', message: 'Instalando atualização...' });
+      await pendingUpdate.install();
+      setPendingUpdate(null);
+      setToast({ tone: 'success', message: 'Reinicie o sistema.' });
+      await relaunch();
+    } catch {
+      setToast({ tone: 'error', message: 'Não foi possível instalar a atualização.' });
+    } finally {
+      setIsInstallingUpdate(false);
+      setUpdateInstallStatus('');
+    }
   }
 
   function renderHeaderAction() {
@@ -245,9 +347,10 @@ export function AppShell() {
                   variant="ghost"
                   className="h-6 w-6"
                   aria-label="Verificar atualização"
-                  onClick={() => setToast({ tone: 'success', message: 'Atualizador será configurado na versão final.' })}
+                  disabled={isCheckingUpdate || isInstallingUpdate}
+                  onClick={() => void checkForUpdate()}
                 >
-                  <RefreshCw className="h-3.5 w-3.5" />
+                  <RefreshCw className={clsx('h-3.5 w-3.5', isCheckingUpdate && 'animate-spin')} />
                 </Button>
               </div>
             )}
@@ -295,6 +398,16 @@ export function AppShell() {
             }
             setCashAction(null);
           }}
+        />
+      )}
+      {pendingUpdate && (
+        <UpdateAvailableModal
+          currentVersion={appVersion || '0.1.5'}
+          update={pendingUpdate}
+          busy={isInstallingUpdate}
+          status={updateInstallStatus}
+          onClose={() => setPendingUpdate(null)}
+          onConfirm={() => void installPendingUpdate()}
         />
       )}
       {toast && (

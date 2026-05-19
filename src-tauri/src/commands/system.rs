@@ -1,6 +1,6 @@
 use crate::app_state::AppState;
 use crate::error::{AppError, AppResult};
-use crate::services::offline_service::{BackupDto, OfflineService, OfflineStatusDto};
+use crate::services::offline_service::{BackupDto, BackupMaintenanceDto, OfflineService, OfflineStatusDto};
 use crate::services::system_service::{SystemHealthDto, SystemService};
 use bcrypt::{hash, verify};
 use rusqlite::OptionalExtension;
@@ -84,6 +84,95 @@ pub fn restore_backup(state: State<'_, AppState>, backup_path: String, password:
 #[tauri::command]
 pub fn create_database_backup(state: State<'_, AppState>, password: String) -> AppResult<BackupDto> {
     create_backup(state, password)
+}
+
+#[tauri::command]
+pub fn create_auto_update_backup(state: State<'_, AppState>) -> AppResult<BackupDto> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.create_auto_update_backup()
+}
+
+#[tauri::command]
+pub fn ensure_daily_backup(state: State<'_, AppState>) -> AppResult<BackupMaintenanceDto> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.ensure_auto_backup()
+}
+
+#[tauri::command]
+pub fn ensure_auto_backup(state: State<'_, AppState>) -> AppResult<BackupMaintenanceDto> {
+    ensure_daily_backup(state)
+}
+
+#[tauri::command]
+pub fn get_auto_backup_interval_hours(state: State<'_, AppState>) -> AppResult<i64> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.auto_backup_interval_hours()
+}
+
+#[tauri::command]
+pub fn set_auto_backup_interval_hours(state: State<'_, AppState>, interval_hours: i64) -> AppResult<i64> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.set_auto_backup_interval_hours(interval_hours)
+}
+
+#[tauri::command]
+pub fn cleanup_old_auto_backups(state: State<'_, AppState>) -> AppResult<usize> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.cleanup_old_auto_backups()
+}
+
+#[tauri::command]
+pub fn open_backup_folder(state: State<'_, AppState>) -> AppResult<()> {
+    std::fs::create_dir_all(&state.backup_dir)?;
+
+    #[cfg(target_os = "windows")]
+    {
+        std::process::Command::new("explorer")
+            .arg(&state.backup_dir)
+            .spawn()?;
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        std::process::Command::new("open").arg(&state.backup_dir).spawn()?;
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        std::process::Command::new("xdg-open").arg(&state.backup_dir).spawn()?;
+    }
+
+    Ok(())
 }
 
 #[tauri::command]

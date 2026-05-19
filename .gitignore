@@ -19,3 +19,5 @@ src-tauri/.tauri/
 .env.*
 !.env.example
 private.key
+*.key
+!public.key

@@ -12,6 +12,8 @@ use tauri::Manager;
 pub fn run() {
     tauri::Builder::default()
         .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_process::init())
+        .plugin(tauri_plugin_updater::Builder::new().build())
         .setup(|app| {
             let database = open_database()?;
             app.manage(AppState::new(database));
@@ -25,6 +27,13 @@ pub fn run() {
             commands::system::list_backups,
             commands::system::restore_backup,
             commands::system::create_database_backup,
+            commands::system::create_auto_update_backup,
+            commands::system::ensure_daily_backup,
+            commands::system::ensure_auto_backup,
+            commands::system::get_auto_backup_interval_hours,
+            commands::system::set_auto_backup_interval_hours,
+            commands::system::cleanup_old_auto_backups,
+            commands::system::open_backup_folder,
             commands::system::list_database_backups,
             commands::system::restore_database_backup,
             commands::system::delete_database_backup,

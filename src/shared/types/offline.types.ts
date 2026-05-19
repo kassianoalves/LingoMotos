@@ -3,6 +3,7 @@ export type BackupInfo = {
   path: string;
   size_bytes: number;
   created_at: string;
+  backup_type: 'automatic' | 'pre-update' | 'manual-legacy';
 };
 
 export type OfflineStatus = {
@@ -15,3 +16,10 @@ export type OfflineStatus = {
   pending_sync_count: number;
 };
 
+export type BackupMaintenance = {
+  backup_created: boolean;
+  backup: BackupInfo | null;
+  deleted_auto_backups: number;
+  interval_hours: number;
+  next_check_after_ms: number;
+};

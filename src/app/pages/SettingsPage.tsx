@@ -5,15 +5,23 @@ import { Input } from '@shared/components/ui/input';
 import { useStoreSettingsStore } from '@shared/stores/store-settings.store';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { invokeCommand } from '@shared/lib/tauri/invoke-command';
-import { useBackups, useCreateBackup, useDeleteBackup, useRestoreBackup } from '@shared/query/offline.queries';
+import {
+  useAutoBackupInterval,
+  useBackups,
+  useDeleteBackup,
+  useOfflineStatus,
+  useRestoreBackup,
+  useSaveAutoBackupInterval,
+} from '@shared/query/offline.queries';
+import { offlineService } from '@shared/services/offline.service';
 import { MasterPasswordVerifyModal } from '@shared/components/security/MasterPasswordModal';
 import { securityService } from '@shared/services/security.service';
 import { QrCodeModal } from '@shared/components/QrCodeModal';
 import { buildWhatsappUrl } from '@/utils/whatsapp';
-import { AlertTriangle } from 'lucide-react';
+import { AlertTriangle, Database, FolderOpen, type LucideIcon } from 'lucide-react';
 
-type ToastTone = 'saved' | 'error' | 'backup' | 'deleted' | 'restored' | 'reset';
-type CriticalAction = { type: 'backup' | 'restore' | 'delete' | 'reset'; backupPath?: string } | null;
+type ToastTone = 'saved' | 'error' | 'backup-config' | 'deleted' | 'restored' | 'reset' | 'folder';
+type CriticalAction = { type: 'restore' | 'delete' | 'reset'; backupPath?: string } | null;
 
 export function SettingsPage() {
   const savedInfo = useStoreSettingsStore((state) => state.settings);
@@ -24,10 +32,13 @@ export function SettingsPage() {
   const [criticalAction, setCriticalAction] = useState<CriticalAction>(null);
   const [storeWhatsappQr, setStoreWhatsappQr] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const offlineStatus = useOfflineStatus();
   const backups = useBackups();
-  const createBackup = useCreateBackup();
+  const autoBackupInterval = useAutoBackupInterval();
+  const saveAutoBackupInterval = useSaveAutoBackupInterval();
   const restoreBackup = useRestoreBackup();
   const deleteBackup = useDeleteBackup();
+  const [backupIntervalDraft, setBackupIntervalDraft] = useState(6);
   const previewUrl = useMemo(() => (draft.logo ? convertFileSrc(draft.logo) : ''), [draft.logo]);
 
   useEffect(() => {
@@ -39,10 +50,26 @@ export function SettingsPage() {
   }, [savedInfo]);
 
   useEffect(() => {
+    if (autoBackupInterval.data) {
+      setBackupIntervalDraft(autoBackupInterval.data);
+    }
+  }, [autoBackupInterval.data]);
+
+  useEffect(() => {
     if (!toast) return;
     const id = window.setTimeout(() => setToast(null), toast === 'error' ? 4500 : 3000);
     return () => window.clearTimeout(id);
   }, [toast]);
+
+  useEffect(() => {
+    const refreshBackups = () => {
+      void backups.refetch();
+      void offlineStatus.refetch();
+    };
+
+    window.addEventListener('lingomotos:backup-created', refreshBackups);
+    return () => window.removeEventListener('lingomotos:backup-created', refreshBackups);
+  }, [backups, offlineStatus]);
 
   return (
     <div className="space-y-6 px-6 pb-6 pt-4">
@@ -120,10 +147,71 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader><CardTitle>Backup</CardTitle></CardHeader>
+        <CardHeader>
+          <CardTitle>Dados locais</CardTitle>
+        </CardHeader>
         <CardContent className="space-y-4">
+          <div className="grid gap-3 text-sm">
+            <PathRow icon={Database} label="Local do banco" value={offlineStatus.data?.database_path ?? 'Carregando...'} />
+            <PathRow icon={FolderOpen} label="Local dos backups" value={offlineStatus.data?.backup_dir ?? 'Carregando...'} />
+          </div>
+          <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
+            <p className="text-sm text-muted-foreground">Desinstalar o sistema não remove seus dados locais.</p>
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await offlineService.openBackupFolder();
+                  setToast('folder');
+                } catch {
+                  setToast('error');
+                }
+              }}
+            >
+              <FolderOpen className="h-4 w-4" />
+              Abrir pasta de backups
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card>
+        <CardHeader><CardTitle>Backup</CardTitle></CardHeader>
+        <CardContent className="space-y-5">
           <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <Button onClick={() => setCriticalAction({ type: 'backup' })}>Criar backup agora</Button>
+            <div className="space-y-3">
+              <div>
+                <h3 className="text-sm font-semibold">Backup automático</h3>
+                <p className="mt-1 text-sm text-muted-foreground">O sistema cria backups automaticamente no intervalo definido.</p>
+              </div>
+              <div className="flex flex-wrap items-center gap-2 text-sm">
+                <span>Fazer backup a cada</span>
+                <Input
+                  type="number"
+                  min={1}
+                  max={24}
+                  value={backupIntervalDraft}
+                  onChange={(event) => setBackupIntervalDraft(Number(event.target.value))}
+                  className="h-9 w-20"
+                />
+                <span>horas</span>
+                <Button
+                  variant="outline"
+                  onClick={async () => {
+                    try {
+                      const saved = await saveAutoBackupInterval.mutateAsync(backupIntervalDraft);
+                      setBackupIntervalDraft(saved);
+                      setToast('backup-config');
+                      window.dispatchEvent(new CustomEvent('lingomotos:auto-backup-interval-changed'));
+                    } catch {
+                      setToast('error');
+                    }
+                  }}
+                >
+                  Salvar intervalo
+                </Button>
+              </div>
+            </div>
             <div className="flex flex-col items-start gap-1 sm:items-end">
               <Button
                 variant="destructive"
@@ -141,7 +229,7 @@ export function SettingsPage() {
               <div key={backup.path} className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm">
                 <div className="min-w-0">
                   <p className="truncate font-medium">{backup.file_name}</p>
-                  <p className="text-xs text-muted-foreground">{backup.created_at}</p>
+                  <p className="text-xs text-muted-foreground">{backupTypeLabel(backup.backup_type)} · {backup.created_at}</p>
                 </div>
                 <div className="flex gap-2">
                   <Button size="sm" variant="outline" onClick={() => setCriticalAction({ type: 'restore', backupPath: backup.path })}>Restaurar</Button>
@@ -173,15 +261,9 @@ export function SettingsPage() {
       )}
       {criticalAction && (
         <MasterPasswordVerifyModal
-          title={criticalAction.type === 'backup' ? 'Criar backup' : criticalAction.type === 'restore' ? 'Restaurar backup' : criticalAction.type === 'delete' ? 'Excluir backup' : 'Resetar sistema de fabrica'}
+          title={criticalAction.type === 'restore' ? 'Restaurar backup' : criticalAction.type === 'delete' ? 'Excluir backup' : 'Resetar sistema de fabrica'}
           onCancel={() => setCriticalAction(null)}
           onVerified={async (password) => {
-            if (criticalAction.type === 'backup') {
-              await createBackup.mutateAsync(password);
-              setToast('backup');
-              setCriticalAction(null);
-              return;
-            }
             if (criticalAction.type === 'restore' && criticalAction.backupPath) {
               if (!window.confirm('Restaurar este backup?')) return;
               await restoreBackup.mutateAsync({ backupPath: criticalAction.backupPath, password });
@@ -217,19 +299,39 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
+function PathRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+  return (
+    <div className="grid gap-2 rounded-md border border-border bg-background p-3 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
+      <div className="flex items-center gap-2 font-medium">
+        <Icon className="h-4 w-4 text-primary" />
+        {label}
+      </div>
+      <code className="min-w-0 break-all rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">{value}</code>
+    </div>
+  );
+}
+
+function backupTypeLabel(type: 'automatic' | 'pre-update' | 'manual-legacy') {
+  if (type === 'automatic') return 'Automático';
+  if (type === 'pre-update') return 'Pré-atualização';
+  return 'Manual legado';
+}
+
 function Toast({ tone }: { tone: ToastTone }) {
   const message =
     tone === 'saved'
       ? 'Alteracoes salvas.'
-      : tone === 'backup'
-        ? 'Backup criado com sucesso.'
+      : tone === 'backup-config'
+        ? 'Intervalo de backup salvo.'
         : tone === 'deleted'
           ? 'Backup excluído com sucesso.'
         : tone === 'restored'
           ? 'Backup restaurado. Reinicie o sistema para aplicar completamente.'
           : tone === 'reset'
             ? 'Reset de fábrica concluído.'
-            : 'Nao foi possivel salvar.';
+            : tone === 'folder'
+              ? 'Pasta de backups aberta.'
+              : 'Nao foi possivel salvar.';
   return (
     <div className={`fixed bottom-5 right-5 z-50 rounded-md px-4 py-3 text-sm shadow-lg ${tone === 'error' ? 'bg-destructive text-destructive-foreground' : 'bg-success text-success-foreground'}`}>
       {message}

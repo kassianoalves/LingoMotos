@@ -73,6 +73,11 @@ const MIGRATIONS: &[Migration] = &[
         name: "product_custom_fields",
         sql: include_str!("../../migrations/0013_product_custom_fields.sql"),
     },
+    Migration {
+        version: 14,
+        name: "auto_backup_settings",
+        sql: include_str!("../../migrations/0014_auto_backup_settings.sql"),
+    },
 ];
 
 pub fn run_migrations(connection: &Connection) -> AppResult<()> {
