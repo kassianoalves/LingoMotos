@@ -5,6 +5,7 @@ import type { Category, Product, ProductCustomFieldInput, ProductFormValues, Sup
 import { useSaveProduct } from '../queries/inventory.queries';
 import { inventoryService } from '../services/inventory.service';
 import { formatBRLInput, parseBRLInputToCents, sanitizeIntegerInput } from '@/utils/numberFormat';
+import { DialogBody, DialogShell, StickyDialogFooter } from '@shared/components/layout';
 
 type ProductFormModalProps = {
   product: Product | null;
@@ -82,8 +83,13 @@ export function ProductFormModal({ product, categories, suppliers, onClose, onNe
   }, [manualSku, product, values.categoryId, values.brand, values.motorcycleApplication, values.name]);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <form className="w-[760px] rounded-lg border border-border bg-card p-5 shadow-lg" onSubmit={handleSubmit}>
+    <DialogShell
+      title={product ? 'Editar produto' : 'Novo produto'}
+      description="Cadastro rapido para operacao de balcao."
+      onClose={onClose}
+      className="max-w-[760px]"
+    >
+      <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">{product ? 'Editar produto' : 'Novo produto'}</h2>
@@ -92,7 +98,8 @@ export function ProductFormModal({ product, categories, suppliers, onClose, onNe
           <Button type="button" variant="ghost" onClick={onClose}>Fechar</Button>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <DialogBody>
+        <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
           <Field label="SKU / Código interno" error={errors.sku}>
             <div className="space-y-2">
               <Input
@@ -239,15 +246,16 @@ export function ProductFormModal({ product, categories, suppliers, onClose, onNe
           ))}
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={saveProduct.isPending}>
             Salvar produto
           </Button>
-        </div>
+        </StickyDialogFooter>
         {toast && <p className="mt-3 text-sm text-primary">{toast}</p>}
       </form>
-    </div>
+    </DialogShell>
   );
 
   function updateCustomField(index: number, patch: Partial<ProductCustomFieldInput>) {

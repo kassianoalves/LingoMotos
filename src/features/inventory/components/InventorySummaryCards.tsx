@@ -16,7 +16,7 @@ const cards = [
 
 export function InventorySummaryCards({ summary }: InventorySummaryCardsProps) {
   return (
-    <div className="grid gap-4 xl:grid-cols-4">
+    <div className="grid grid-cols-4 gap-3 compact:gap-2 max-[1100px]:grid-cols-2">
       {cards.map((card) => {
         const Icon = card.icon;
         const value =
@@ -26,13 +26,13 @@ export function InventorySummaryCards({ summary }: InventorySummaryCardsProps) {
 
         return (
           <Card key={card.key}>
-            <CardHeader className="flex flex-row items-center justify-between">
-              <CardTitle className="text-muted-foreground">{card.label}</CardTitle>
+            <CardHeader className="flex flex-row items-center justify-between p-3 pb-1 compact:p-2">
+              <CardTitle className="text-xs text-muted-foreground">{card.label}</CardTitle>
               <Icon className="h-4 w-4 text-muted-foreground" />
             </CardHeader>
-            <CardContent>
-              <p className="text-xl font-semibold">{value}</p>
-              <p className="mt-2 text-xs text-muted-foreground">
+            <CardContent className="p-3 pt-0 compact:p-2 compact:pt-0">
+              <p className="text-lg font-semibold">{value}</p>
+              <p className="mt-1 truncate text-xs text-muted-foreground">
                 {card.key === 'potentialProfitCents'
                   ? `Margem media ${summary.averageMarginPercent.toFixed(1)}%`
                   : `Valor em estoque ${formatCurrency(summary.inventoryCostCents)}`}
@@ -41,7 +41,7 @@ export function InventorySummaryCards({ summary }: InventorySummaryCardsProps) {
           </Card>
         );
       })}
-      <Card className="xl:col-span-4">
+      <Card className="col-span-4 hidden xl:block">
         <CardContent className="grid gap-4 p-4 md:grid-cols-3">
           <div className="flex items-center gap-3">
             <CircleDollarSign className="h-4 w-4 text-primary" />

@@ -7,8 +7,7 @@ import { convertFileSrc } from '@tauri-apps/api/core';
 import { invokeCommand } from '@shared/lib/tauri/invoke-command';
 import {
   useAutoBackupInterval,
-  useBackups,
-  useDeleteBackup,
+  useAutoBackupSummary,
   useOfflineStatus,
   useRestoreBackup,
   useSaveAutoBackupInterval,
@@ -18,26 +17,39 @@ import { MasterPasswordVerifyModal } from '@shared/components/security/MasterPas
 import { securityService } from '@shared/services/security.service';
 import { QrCodeModal } from '@shared/components/QrCodeModal';
 import { buildWhatsappUrl } from '@/utils/whatsapp';
-import { AlertTriangle, Database, FolderOpen, type LucideIcon } from 'lucide-react';
+import { AlertTriangle, FolderOpen } from 'lucide-react';
+import { DialogBody, DialogShell, PageContainer, ScrollArea, StickyDialogFooter } from '@shared/components/layout';
+import { open } from '@tauri-apps/plugin-dialog';
+import { relaunch } from '@tauri-apps/plugin-process';
 
-type ToastTone = 'saved' | 'error' | 'backup-config' | 'deleted' | 'restored' | 'reset' | 'folder';
-type CriticalAction = { type: 'restore' | 'delete' | 'reset'; backupPath?: string } | null;
+type ToastTone = 'saved' | 'error' | 'backup-config' | 'reset' | 'folder';
+type CriticalAction = { type: 'reset' } | null;
+type RestoreFlow =
+  | { status: 'confirm'; backupPath: string; fileName: string }
+  | { status: 'password'; backupPath: string; fileName: string }
+  | { status: 'loading'; fileName: string }
+  | { status: 'success'; fileName: string }
+  | { status: 'error'; fileName: string; message: string }
+  | null;
 
-export function SettingsPage() {
+const DEVELOPER_INSTAGRAM_URL = 'https://www.instagram.com/kassianoalvx';
+const DEVELOPER_SUPPORT_URL = 'https://wa.me/5521967022950?text=Ol%C3%A1%2C%20preciso%20de%20suporte%20no%20LingoMotos.';
+
+export function SettingsPage({ updateAvailable = false }: { updateAvailable?: boolean }) {
   const savedInfo = useStoreSettingsStore((state) => state.settings);
   const saveSettings = useStoreSettingsStore((state) => state.saveSettings);
   const loadSettings = useStoreSettingsStore((state) => state.loadSettings);
   const [draft, setDraft] = useState(savedInfo);
   const [toast, setToast] = useState<ToastTone | null>(null);
   const [criticalAction, setCriticalAction] = useState<CriticalAction>(null);
+  const [restoreFlow, setRestoreFlow] = useState<RestoreFlow>(null);
   const [storeWhatsappQr, setStoreWhatsappQr] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const offlineStatus = useOfflineStatus();
-  const backups = useBackups();
+  const autoBackupSummary = useAutoBackupSummary();
   const autoBackupInterval = useAutoBackupInterval();
   const saveAutoBackupInterval = useSaveAutoBackupInterval();
   const restoreBackup = useRestoreBackup();
-  const deleteBackup = useDeleteBackup();
   const [backupIntervalDraft, setBackupIntervalDraft] = useState(6);
   const previewUrl = useMemo(() => (draft.logo ? convertFileSrc(draft.logo) : ''), [draft.logo]);
 
@@ -63,16 +75,38 @@ export function SettingsPage() {
 
   useEffect(() => {
     const refreshBackups = () => {
-      void backups.refetch();
+      void autoBackupSummary.refetch();
       void offlineStatus.refetch();
     };
 
     window.addEventListener('lingomotos:backup-created', refreshBackups);
     return () => window.removeEventListener('lingomotos:backup-created', refreshBackups);
-  }, [backups, offlineStatus]);
+  }, [autoBackupSummary, offlineStatus]);
+
+  async function selectBackupForRestore() {
+    try {
+      const selected = await open({
+        multiple: false,
+        directory: false,
+        defaultPath: offlineStatus.data?.backup_dir,
+        filters: [{ name: 'Backup SQLite', extensions: ['db', 'sqlite', 'sqlite3'] }],
+      });
+
+      if (!selected || Array.isArray(selected)) return;
+
+      setRestoreFlow({
+        status: 'confirm',
+        backupPath: selected,
+        fileName: fileNameFromPath(selected),
+      });
+    } catch {
+      setToast('error');
+    }
+  }
 
   return (
-    <div className="space-y-6 px-6 pb-6 pt-4">
+    <PageContainer>
+      <ScrollArea className="space-y-5 pr-1">
 
       <Card>
         <CardHeader>
@@ -92,7 +126,7 @@ export function SettingsPage() {
             <div className="grid h-32 place-items-center overflow-hidden rounded-md border border-border bg-muted">
               {previewUrl ? <img src={previewUrl} alt="Logo da loja" className="h-full w-full object-contain" /> : <span className="text-sm font-semibold text-muted-foreground">LM</span>}
             </div>
-            <div className="space-y-3">
+            <div className="min-w-0 space-y-4">
               <div>
                 <p className="text-sm font-medium">Logo da loja</p>
                 <p className="text-sm text-muted-foreground">PNG, JPG, JPEG ou WEBP.</p>
@@ -147,56 +181,34 @@ export function SettingsPage() {
       </Card>
 
       <Card>
-        <CardHeader>
-          <CardTitle>Dados locais</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          <div className="grid gap-3 text-sm">
-            <PathRow icon={Database} label="Local do banco" value={offlineStatus.data?.database_path ?? 'Carregando...'} />
-            <PathRow icon={FolderOpen} label="Local dos backups" value={offlineStatus.data?.backup_dir ?? 'Carregando...'} />
-          </div>
-          <div className="flex flex-col gap-3 border-t border-border pt-4 sm:flex-row sm:items-center sm:justify-between">
-            <p className="text-sm text-muted-foreground">Desinstalar o sistema não remove seus dados locais.</p>
-            <Button
-              variant="outline"
-              onClick={async () => {
-                try {
-                  await offlineService.openBackupFolder();
-                  setToast('folder');
-                } catch {
-                  setToast('error');
-                }
-              }}
-            >
-              <FolderOpen className="h-4 w-4" />
-              Abrir pasta de backups
-            </Button>
-          </div>
-        </CardContent>
-      </Card>
-
-      <Card>
-        <CardHeader><CardTitle>Backup</CardTitle></CardHeader>
-        <CardContent className="space-y-5">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+        <CardContent className="p-4 compact:p-3">
+          <div className="grid gap-4 lg:grid-cols-[minmax(0,1fr)_260px]">
             <div className="space-y-3">
               <div>
                 <h3 className="text-sm font-semibold">Backup automático</h3>
-                <p className="mt-1 text-sm text-muted-foreground">O sistema cria backups automaticamente no intervalo definido.</p>
+                <p className="mt-1 text-xs text-muted-foreground">Cópias automáticas dos dados locais.</p>
               </div>
+              <AutoBackupSummaryCard
+                lastBackupAt={autoBackupSummary.data?.last_backup_at ?? null}
+                nextBackupAt={autoBackupSummary.data?.next_backup_at ?? null}
+                intervalHours={autoBackupSummary.data?.interval_hours ?? backupIntervalDraft}
+                status={autoBackupSummary.data?.status ?? 'pending'}
+                errorMessage={autoBackupSummary.data?.error_message ?? null}
+              />
               <div className="flex flex-wrap items-center gap-2 text-sm">
-                <span>Fazer backup a cada</span>
+                <span>Intervalo</span>
                 <Input
                   type="number"
                   min={1}
                   max={24}
                   value={backupIntervalDraft}
-                  onChange={(event) => setBackupIntervalDraft(Number(event.target.value))}
-                  className="h-9 w-20"
+                  onChange={(event) => setBackupIntervalDraft(clampBackupInterval(Number(event.target.value)))}
+                  className="h-8 w-16"
                 />
                 <span>horas</span>
                 <Button
                   variant="outline"
+                  size="sm"
                   onClick={async () => {
                     try {
                       const saved = await saveAutoBackupInterval.mutateAsync(backupIntervalDraft);
@@ -208,46 +220,56 @@ export function SettingsPage() {
                     }
                   }}
                 >
-                  Salvar intervalo
+                  Salvar
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  onClick={async () => {
+                    try {
+                      await offlineService.openBackupFolder();
+                      setToast('folder');
+                    } catch {
+                      setToast('error');
+                    }
+                  }}
+                >
+                  <FolderOpen className="h-4 w-4" />
+                  Abrir backup
                 </Button>
               </div>
             </div>
-            <div className="flex flex-col items-start gap-1 sm:items-end">
+            <div className="flex flex-col items-start justify-start gap-1.5 lg:items-end">
               <Button
                 variant="destructive"
-                className="gap-2 opacity-80 transition-opacity hover:opacity-100"
+                size="sm"
+                className="gap-2 opacity-90 transition-opacity hover:opacity-100"
                 onClick={() => setCriticalAction({ type: 'reset' })}
               >
                 <AlertTriangle className="h-4 w-4" />
-                Resetar sistema de fábrica
+                Resetar
               </Button>
-              <p className="text-xs text-destructive/80">Apaga todos os dados locais e backups.</p>
+              <p className="text-xs text-muted-foreground">Apaga dados locais e backups.</p>
             </div>
-          </div>
-          <div className="space-y-2">
-            {(backups.data ?? []).map((backup) => (
-              <div key={backup.path} className="flex items-center justify-between gap-3 rounded-md border border-border p-3 text-sm">
-                <div className="min-w-0">
-                  <p className="truncate font-medium">{backup.file_name}</p>
-                  <p className="text-xs text-muted-foreground">{backupTypeLabel(backup.backup_type)} · {backup.created_at}</p>
-                </div>
-                <div className="flex gap-2">
-                  <Button size="sm" variant="outline" onClick={() => setCriticalAction({ type: 'restore', backupPath: backup.path })}>Restaurar</Button>
-                  <Button size="sm" variant="destructive" onClick={() => setCriticalAction({ type: 'delete', backupPath: backup.path })}>Excluir</Button>
-                </div>
-              </div>
-            ))}
-            {(backups.data ?? []).length === 0 && <p className="text-sm text-muted-foreground">Nenhum backup criado.</p>}
           </div>
         </CardContent>
       </Card>
 
-      <footer className="border-t border-border pt-4 text-sm text-muted-foreground">
+      <SettingsFooter
+        updateAvailable={updateAvailable}
+        backupFailed={autoBackupSummary.data?.status === 'failed'}
+        onOpenInstagram={() => void openDeveloperLink(DEVELOPER_INSTAGRAM_URL, () => setToast('error'))}
+        onOpenSupport={() => void openDeveloperLink(DEVELOPER_SUPPORT_URL, () => setToast('error'))}
+      />
+      <footer className="hidden">
         <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
           <span>Desenvolvido por empresa responsável pelo sistema.</span>
           <span>Informações institucionais serão adicionadas posteriormente.</span>
         </div>
       </footer>
+
+      </ScrollArea>
 
       {toast && <Toast tone={toast} />}
       {storeWhatsappQr && (
@@ -261,32 +283,38 @@ export function SettingsPage() {
       )}
       {criticalAction && (
         <MasterPasswordVerifyModal
-          title={criticalAction.type === 'restore' ? 'Restaurar backup' : criticalAction.type === 'delete' ? 'Excluir backup' : 'Resetar sistema de fabrica'}
+          title="Resetar sistema de fabrica"
           onCancel={() => setCriticalAction(null)}
           onVerified={async (password) => {
-            if (criticalAction.type === 'restore' && criticalAction.backupPath) {
-              if (!window.confirm('Restaurar este backup?')) return;
-              await restoreBackup.mutateAsync({ backupPath: criticalAction.backupPath, password });
-              setToast('restored');
-              setCriticalAction(null);
-              return;
-            }
-            if (criticalAction.type === 'delete' && criticalAction.backupPath) {
-              await deleteBackup.mutateAsync({ backupPath: criticalAction.backupPath, password });
-              setToast('deleted');
-              setCriticalAction(null);
-              return;
-            }
             if (!window.confirm('Essa acao apagara clientes, produtos, vendas, estoque, financeiro, configuracoes operacionais e tambem todos os backups salvos. Deseja continuar?')) return;
             if (window.prompt('Digite RESETAR para confirmar') !== 'RESETAR') return;
             await securityService.factoryReset(password);
             setToast('reset');
             setCriticalAction(null);
-            await backups.refetch();
+            await autoBackupSummary.refetch();
           }}
         />
       )}
-    </div>
+      <RestoreBackupFlowModal
+        flow={restoreFlow}
+        onCancel={() => setRestoreFlow(null)}
+        onConfirm={(flow) => setRestoreFlow({ status: 'password', backupPath: flow.backupPath, fileName: flow.fileName })}
+        onPassword={async (password, flow) => {
+          setRestoreFlow({ status: 'loading', fileName: flow.fileName });
+          try {
+            await restoreBackup.mutateAsync({ backupPath: flow.backupPath, password });
+            await autoBackupSummary.refetch();
+            setRestoreFlow({ status: 'success', fileName: flow.fileName });
+          } catch (error) {
+            setRestoreFlow({
+              status: 'error',
+              fileName: flow.fileName,
+              message: friendlyRestoreError(error),
+            });
+          }
+        }}
+      />
+    </PageContainer>
   );
 }
 
@@ -299,22 +327,191 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
   );
 }
 
-function PathRow({ icon: Icon, label, value }: { icon: LucideIcon; label: string; value: string }) {
+function SettingsFooter({
+  updateAvailable,
+  backupFailed,
+  onOpenInstagram,
+  onOpenSupport,
+}: {
+  updateAvailable: boolean;
+  backupFailed: boolean;
+  onOpenInstagram: () => void;
+  onOpenSupport: () => void;
+}) {
   return (
-    <div className="grid gap-2 rounded-md border border-border bg-background p-3 md:grid-cols-[180px_minmax(0,1fr)] md:items-center">
-      <div className="flex items-center gap-2 font-medium">
-        <Icon className="h-4 w-4 text-primary" />
-        {label}
+    <footer className="border-t border-border/60 py-1 text-center text-[10px] leading-tight text-muted-foreground">
+      <div className="mx-auto flex max-w-2xl flex-col items-center gap-0.5 px-2">
+        <p className="text-[11px] font-semibold tracking-wide text-foreground">Desenvolvido por Kassiano Alves</p>
+        <p>maio/2026</p>
+        <div className="mt-0.5 flex items-center justify-center gap-2">
+          <button type="button" className="transition-colors hover:text-foreground" onClick={onOpenInstagram}>
+            Instagram
+          </button>
+          <span className="text-border">•</span>
+          <button type="button" className="transition-colors hover:text-foreground" onClick={onOpenSupport}>
+            Suporte
+          </button>
+        </div>
       </div>
-      <code className="min-w-0 break-all rounded-sm bg-muted px-2 py-1 text-xs text-muted-foreground">{value}</code>
+    </footer>
+  );
+}
+
+async function openDeveloperLink(url: string, onError: () => void) {
+  try {
+    await invokeCommand('open_external_url', { url });
+  } catch {
+    onError();
+  }
+}
+
+
+function AutoBackupSummaryCard({
+  lastBackupAt,
+  nextBackupAt,
+  intervalHours,
+  status,
+  errorMessage,
+}: {
+  lastBackupAt: string | null;
+  nextBackupAt: string | null;
+  intervalHours: number;
+  status: 'created' | 'restored' | 'failed' | 'pending';
+  errorMessage: string | null;
+}) {
+  const failed = status === 'failed';
+
+  return (
+    <div className="grid max-w-xl gap-1 rounded-md border border-border bg-muted/20 p-3 text-xs text-muted-foreground">
+      <SummaryLine label="Ultimo backup" value={lastBackupAt ? formatDateTime(lastBackupAt) : 'Ainda nao criado'} />
+      <div className="flex flex-wrap items-center gap-2">
+        <span>Status:</span>
+        <span className={failed ? 'font-medium text-destructive' : 'font-medium text-success'}>
+          {failed ? 'Falhou' : status === 'pending' ? 'Pendente' : 'OK'}
+        </span>
+      </div>
+      <SummaryLine label="Proximo backup" value={nextBackupAt ? formatDateTime(nextBackupAt) : 'Aguardando primeiro backup'} />
+      <SummaryLine label="Intervalo" value={`A cada ${intervalHours} horas`} />
+      {failed && errorMessage && <p className="text-destructive/80">{errorMessage}</p>}
     </div>
   );
 }
 
-function backupTypeLabel(type: 'automatic' | 'pre-update' | 'manual-legacy') {
-  if (type === 'automatic') return 'Automático';
-  if (type === 'pre-update') return 'Pré-atualização';
-  return 'Manual legado';
+function SummaryLine({ label, value }: { label: string; value: string }) {
+  return (
+    <p>
+      <span>{label}: </span>
+      <span>{value}</span>
+    </p>
+  );
+}
+
+function RestoreBackupFlowModal({
+  flow,
+  onCancel,
+  onConfirm,
+  onPassword,
+}: {
+  flow: RestoreFlow;
+  onCancel: () => void;
+  onConfirm: (flow: Extract<RestoreFlow, { status: 'confirm' }>) => void;
+  onPassword: (password: string, flow: Extract<RestoreFlow, { status: 'password' }>) => Promise<void>;
+}) {
+  if (!flow) return null;
+
+  if (flow.status === 'password') {
+    return (
+      <MasterPasswordVerifyModal
+        title="Restaurar backup"
+        onCancel={onCancel}
+        onVerified={(password) => onPassword(password, flow)}
+      />
+    );
+  }
+
+  if (flow.status === 'confirm') {
+    return (
+      <DialogShell title="Restaurar backup" onClose={onCancel} className="max-w-md" zIndexClassName="z-[55]">
+        <DialogBody className="space-y-3">
+          <p className="text-sm font-medium">Deseja restaurar este backup?</p>
+          <p className="break-all rounded-md border border-border bg-muted/30 p-3 text-sm text-muted-foreground">{flow.fileName}</p>
+        </DialogBody>
+        <StickyDialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+          <Button type="button" onClick={() => onConfirm(flow)}>Restaurar</Button>
+        </StickyDialogFooter>
+      </DialogShell>
+    );
+  }
+
+  if (flow.status === 'loading') {
+    return (
+      <DialogShell title="Restaurando backup..." onClose={() => undefined} className="max-w-md" zIndexClassName="z-[55]">
+        <DialogBody className="space-y-2">
+          <p className="text-sm font-medium">Restaurando backup...</p>
+          <p className="text-sm text-muted-foreground">Nao feche o sistema.</p>
+        </DialogBody>
+      </DialogShell>
+    );
+  }
+
+  if (flow.status === 'success') {
+    return (
+      <DialogShell title="Backup restaurado com sucesso." onClose={onCancel} className="max-w-md" zIndexClassName="z-[55]">
+        <DialogBody>
+          <p className="text-sm text-muted-foreground">Reinicie o sistema para aplicar os dados restaurados.</p>
+        </DialogBody>
+        <StickyDialogFooter>
+          <Button type="button" onClick={() => void relaunch()}>Reiniciar sistema</Button>
+        </StickyDialogFooter>
+      </DialogShell>
+    );
+  }
+
+  return (
+    <DialogShell title="Falha ao restaurar backup." onClose={onCancel} className="max-w-md" zIndexClassName="z-[55]">
+      <DialogBody className="space-y-3">
+        <p className="text-sm text-muted-foreground">O banco atual foi preservado.</p>
+        <p className="rounded-md border border-destructive/30 bg-destructive/10 p-3 text-sm text-destructive">{flow.message}</p>
+      </DialogBody>
+      <StickyDialogFooter>
+        <Button type="button" variant="outline" onClick={onCancel}>Cancelar</Button>
+      </StickyDialogFooter>
+    </DialogShell>
+  );
+}
+
+function fileNameFromPath(path: string) {
+  return path.split(/[\\/]/).filter(Boolean).pop() ?? path;
+}
+
+function clampBackupInterval(value: number) {
+  if (!Number.isFinite(value)) return 1;
+  return Math.min(Math.max(Math.trunc(value), 1), 24);
+}
+
+function formatDateTime(value: string) {
+  const normalized = value.includes('T') ? value : value.replace(' ', 'T');
+  const date = new Date(normalized);
+  if (Number.isNaN(date.getTime())) return value;
+
+  return new Intl.DateTimeFormat('pt-BR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  }).format(date);
+}
+
+function friendlyRestoreError(error: unknown) {
+  if (error instanceof Error && error.message) {
+    if (error.message.includes('Senha invalida')) return 'Senha invalida.';
+    if (error.message.includes('Backup invalido')) return 'Arquivo de backup invalido ou nao encontrado.';
+    return error.message;
+  }
+
+  return 'Nao foi possivel restaurar o arquivo selecionado.';
 }
 
 function Toast({ tone }: { tone: ToastTone }) {
@@ -323,15 +520,11 @@ function Toast({ tone }: { tone: ToastTone }) {
       ? 'Alteracoes salvas.'
       : tone === 'backup-config'
         ? 'Intervalo de backup salvo.'
-        : tone === 'deleted'
-          ? 'Backup excluído com sucesso.'
-        : tone === 'restored'
-          ? 'Backup restaurado. Reinicie o sistema para aplicar completamente.'
-          : tone === 'reset'
-            ? 'Reset de fábrica concluído.'
-            : tone === 'folder'
-              ? 'Pasta de backups aberta.'
-              : 'Nao foi possivel salvar.';
+        : tone === 'reset'
+          ? 'Reset de fabrica concluido.'
+          : tone === 'folder'
+            ? 'Pasta de backups aberta.'
+            : 'Nao foi possivel salvar.';
   return (
     <div className={`fixed bottom-5 right-5 z-50 rounded-md px-4 py-3 text-sm shadow-lg ${tone === 'error' ? 'bg-destructive text-destructive-foreground' : 'bg-success text-success-foreground'}`}>
       {message}

@@ -53,6 +53,7 @@ export const useCashSessionStore = create<CashSessionState>((set, get) => ({
   },
   closeCash: async (reportedAmountCents = get().expectedAmountCents, password = '') => {
     await serviceClient.execute<void, { reportedAmountCents: number; password: string }>('close_cash_session', { reportedAmountCents, password });
+    await get().loadCashSession();
     set({ isOpen: false, closedAt: new Date().toISOString(), closeReportedAmountCents: reportedAmountCents });
   },
 }));

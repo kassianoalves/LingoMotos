@@ -1,6 +1,6 @@
 [package]
 name = "lingomotos"
-version = "0.1.7"
+version = "0.1.9"
 description = "Sistema de gerencimento de oficinas de motos"
 authors = ["LingoMotos"]
 edition = "2021"

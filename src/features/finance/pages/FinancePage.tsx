@@ -16,6 +16,7 @@ import { useFinancialGoalsStore } from '../stores/financial-goals.store';
 import { formatBRLInput, parseBRLInputToCents } from '@/utils/numberFormat';
 import { financeRepository } from '../repositories/finance.repository';
 import type { PayableRecord, ReceivableRecord } from '../types/finance.types';
+import { DialogBody, DialogShell, PageContainer, ScrollArea, StickyDialogFooter } from '@shared/components/layout';
 
 export function FinancePage({ cashOpen = true }: { cashOpen?: boolean }) {
   const [goalOpen, setGoalOpen] = useState(false);
@@ -43,20 +44,20 @@ export function FinancePage({ cashOpen = true }: { cashOpen?: boolean }) {
 
   if (!dashboard) {
     return (
-      <div className="p-6">
+      <PageContainer>
         <Card>
           <CardContent className="flex h-52 items-center justify-center gap-3 p-6 text-muted-foreground">
             <RefreshCw className="h-4 w-4 animate-spin" />
             Carregando financeiro local
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="space-y-4 px-5 pb-5 pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <PageContainer className="gap-4">
+      <div className="flex flex-none flex-wrap items-center justify-between gap-3">
         <div className="relative flex items-center gap-2">
           <FinancePeriodFilter filters={filters} onPeriodChange={setPeriod} onCustomPeriodChange={setCustomPeriod} />
         </div>
@@ -65,16 +66,17 @@ export function FinancePage({ cashOpen = true }: { cashOpen?: boolean }) {
 
       {!cashOpen && <Badge variant="warning">Lancamentos bloqueados: caixa fechado</Badge>}
 
-      <FinanceSummaryCards summary={dashboard.summary} />
-      <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
-        <TopSellingCategoriesPanel categories={dashboard.topSellingCategories} />
-        <div className="min-w-0 space-y-4">
-          <PaymentMethodsPanel payments={dashboard.payments} />
-          <RevenueOverview summary={dashboard.summary} />
+      <ScrollArea className="space-y-4">
+        <FinanceSummaryCards summary={dashboard.summary} />
+        <div className="grid gap-4 xl:grid-cols-[minmax(0,2fr)_minmax(360px,1fr)]">
+          <TopSellingCategoriesPanel categories={dashboard.topSellingCategories} />
+          <div className="min-w-0 space-y-4">
+            <PaymentMethodsPanel payments={dashboard.payments} />
+            <RevenueOverview summary={dashboard.summary} />
+          </div>
         </div>
-      </div>
 
-      <FinanceTables
+        <FinanceTables
         sales={dashboard.sales}
         cashFlow={dashboard.cashFlow}
         payables={dashboard.payables}
@@ -125,7 +127,8 @@ export function FinancePage({ cashOpen = true }: { cashOpen?: boolean }) {
             setToast({ tone: 'error', message: 'Erro ao marcar conta como recebida.' });
           }
         }}
-      />
+        />
+      </ScrollArea>
 
       {payableModal && (
         <PayableModal
@@ -157,7 +160,7 @@ export function FinancePage({ cashOpen = true }: { cashOpen?: boolean }) {
 
       {goalOpen && <GoalModal onClose={() => setGoalOpen(false)} onSave={saveGoal} onToast={setToast} />}
       {toast && <Toast toast={toast} />}
-    </div>
+    </PageContainer>
   );
 }
 
@@ -195,10 +198,10 @@ function GoalModal({
   const [isActive, setIsActive] = useState(true);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <form className="w-[540px] rounded-lg border border-border bg-card p-6 shadow-lg">
-        <h3 className="text-base font-semibold">Criar meta</h3>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
+    <DialogShell title="Criar meta" onClose={onClose} className="max-w-[540px]">
+      <form className="flex min-h-0 flex-1 flex-col overflow-hidden">
+        <DialogBody>
+        <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
           <Field label="Nome da meta">
             <Input value={name} onChange={(event) => setName(event.target.value)} />
           </Field>
@@ -222,7 +225,8 @@ function GoalModal({
             <Input type="date" value={endDate} onChange={(event) => setEndDate(event.target.value)} />
           </Field>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button
             type="button"
@@ -248,9 +252,9 @@ function GoalModal({
           >
             Salvar meta
           </Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }
 
@@ -331,8 +335,8 @@ function PayableModal({
   const [recurrenceType, setRecurrenceType] = useState<'unique' | 'monthly'>(initial?.recurrenceType ?? 'unique');
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <form className="w-[640px] rounded-lg border border-border bg-card p-6 shadow-lg" onSubmit={async (event) => {
+    <DialogShell title={initial ? 'Editar conta a pagar' : 'Adicionar conta a pagar'} onClose={onClose} className="max-w-[640px]">
+      <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={async (event) => {
         event.preventDefault();
         try {
           await financeRepository.savePayable({
@@ -349,8 +353,8 @@ function PayableModal({
           onError();
         }
       }}>
-        <h3 className="text-base font-semibold">{initial ? 'Editar conta a pagar' : 'Adicionar conta a pagar'}</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <DialogBody>
+        <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
           <Field label="Descricao"><Input value={description} onChange={(event) => setDescription(event.target.value)} required /></Field>
           <Field label="Categoria/Tipo"><Input value={categoryType} onChange={(event) => setCategoryType(event.target.value)} required /></Field>
           <Field label="Valor"><Input value={amount} onChange={(event) => setAmount(formatBRLInput(event.target.value))} required /></Field>
@@ -363,12 +367,13 @@ function PayableModal({
             </select>
           </Field>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={parseBRLInputToCents(amount) <= 0}>Salvar</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }
 
@@ -390,8 +395,8 @@ function ReceivableModal({
   const [recurrenceType, setRecurrenceType] = useState<'unique' | 'monthly'>(initial?.recurrenceType ?? 'unique');
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <form className="w-[640px] rounded-lg border border-border bg-card p-6 shadow-lg" onSubmit={async (event) => {
+    <DialogShell title={initial ? 'Editar conta a receber' : 'Adicionar conta a receber'} onClose={onClose} className="max-w-[640px]">
+      <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={async (event) => {
         event.preventDefault();
         try {
           await financeRepository.saveReceivable({
@@ -407,8 +412,8 @@ function ReceivableModal({
           onError();
         }
       }}>
-        <h3 className="text-base font-semibold">{initial ? 'Editar conta a receber' : 'Adicionar conta a receber'}</h3>
-        <div className="mt-4 grid gap-4 md:grid-cols-2">
+        <DialogBody>
+        <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
           <Field label="Descricao"><Input value={description} onChange={(event) => setDescription(event.target.value)} required /></Field>
           <Field label="Cliente"><Input value={customer} onChange={(event) => setCustomer(event.target.value)} /></Field>
           <Field label="Valor"><Input value={amount} onChange={(event) => setAmount(formatBRLInput(event.target.value))} required /></Field>
@@ -420,11 +425,12 @@ function ReceivableModal({
             </select>
           </Field>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={parseBRLInputToCents(amount) <= 0}>Salvar</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }

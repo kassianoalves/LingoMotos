@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { clsx } from 'clsx';
 import {
   BarChart3,
@@ -8,7 +9,6 @@ import {
   CircleDollarSign,
   Gauge,
   Moon,
-  Plus,
   Power,
   RefreshCw,
   Settings,
@@ -24,6 +24,7 @@ import { PosPage } from '@features/pos';
 import { WorkshopPage } from '@features/workshop';
 import { Button } from '@shared/components/ui/button';
 import { Badge } from '@shared/components/ui/badge';
+import { Input } from '@shared/components/ui/input';
 import { useAppShellStore } from '@shared/stores/app-shell.store';
 import { useCashSessionStore } from '@shared/stores/cash-session.store';
 import { useThemeStore } from '@shared/stores/theme.store';
@@ -38,6 +39,7 @@ import { SettingsPage } from '@app/pages/SettingsPage';
 import { convertFileSrc } from '@tauri-apps/api/core';
 import { MasterPasswordVerifyModal } from '@shared/components/security/MasterPasswordModal';
 import { UpdateAvailableModal } from '@shared/components/updater/UpdateAvailableModal';
+import { DialogBody, DialogShell, StickyDialogFooter } from '@shared/components/layout';
 
 type AppRoute = {
   path: string;
@@ -47,6 +49,8 @@ type AppRoute = {
   group: 'Operação' | 'Gestão';
   badge?: string;
 };
+
+type UpdateUxState = 'idle' | 'checking' | 'available' | 'downloading' | 'installing' | 'updated' | 'error';
 
 const routes: AppRoute[] = [
   { path: '/inicio', label: 'Início', subtitle: 'Resumo operacional da loja', icon: Gauge, group: 'Operação' },
@@ -61,25 +65,31 @@ const routes: AppRoute[] = [
 
 export function AppShell() {
   const autoBackupTimerRef = useRef<number | null>(null);
+  const isDev = Boolean((import.meta as { env?: { DEV?: boolean } }).env?.DEV);
   const sidebarCollapsed = useAppShellStore((state) => state.sidebarCollapsed);
   const toggleSidebar = useAppShellStore((state) => state.toggleSidebar);
   const theme = useThemeStore((state) => state.theme);
   const toggleTheme = useThemeStore((state) => state.toggleTheme);
+  const queryClient = useQueryClient();
   const isCashOpen = useCashSessionStore((state) => state.isOpen);
   const openCash = useCashSessionStore((state) => state.openCash);
   const closeCash = useCashSessionStore((state) => state.closeCash);
   const loadCashSession = useCashSessionStore((state) => state.loadCashSession);
+  const expectedAmountCents = useCashSessionStore((state) => state.expectedAmountCents);
   const storeSettings = useStoreSettingsStore((state) => state.settings);
   const loadSettings = useStoreSettingsStore((state) => state.loadSettings);
   const [activePath, setActivePath] = useState('/inicio');
   const [cashAction, setCashAction] = useState<'open' | 'close' | null>(null);
   const [toast, setToast] = useState<{ tone: 'success' | 'error'; message: string } | null>(null);
   const [appVersion, setAppVersion] = useState('');
-  const [isCheckingUpdate, setIsCheckingUpdate] = useState(false);
-  const [isInstallingUpdate, setIsInstallingUpdate] = useState(false);
+  const [updateState, setUpdateState] = useState<UpdateUxState>('idle');
   const [updateInstallStatus, setUpdateInstallStatus] = useState('');
   const [pendingUpdate, setPendingUpdate] = useState<PendingUpdate | null>(null);
+  const [availableUpdate, setAvailableUpdate] = useState<PendingUpdate | null>(null);
+  const [updateModalOpen, setUpdateModalOpen] = useState(false);
   const activeRoute = routes.find((route) => route.path === activePath) ?? routes[0];
+  const updateBusy = updateState === 'checking' || updateState === 'downloading' || updateState === 'installing';
+  const updateTooltip = getUpdateTooltip(updateState, Boolean(availableUpdate));
 
   useEffect(() => {
     void loadSettings();
@@ -88,6 +98,26 @@ export function AppShell() {
 
   useEffect(() => {
     void serviceClient.execute<string>('app_version').then(setAppVersion).catch(() => setAppVersion('0.1.5'));
+  }, []);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function checkUpdateInBackground() {
+      try {
+        const update = await updaterService.checkForUpdate();
+        if (cancelled) return;
+        setAvailableUpdate(update ?? null);
+        setUpdateState(update ? 'available' : 'idle');
+      } catch {
+        if (!cancelled) setUpdateState('error');
+      }
+    }
+
+    void checkUpdateInBackground();
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   useEffect(() => {
@@ -138,13 +168,19 @@ export function AppShell() {
   }, [toast]);
 
   function renderPage() {
-    if (activePath === '/inicio') return <HomePage />;
+    if (activePath === '/inicio') {
+      return (
+        <HomePage
+          navigate={setActivePath}
+        />
+      );
+    }
     if (activePath === '/estoque') return <InventoryPage cashOpen={isCashOpen} />;
     if (activePath === '/vendas') return <PosPage cashOpen={isCashOpen} />;
     if (activePath === '/financeiro') return <FinancePage cashOpen={isCashOpen} />;
     if (activePath === '/clientes') return <CustomersPage navigate={setActivePath} cashOpen={isCashOpen} />;
     if (activePath === '/relatorios') return <ReportsPage />;
-    if (activePath === '/configuracoes') return <SettingsPage />;
+    if (activePath === '/configuracoes') return <SettingsPage updateAvailable={Boolean(availableUpdate)} />;
     if (activePath === '/oficina') return <WorkshopPage />;
     return <HomePage />;
   }
@@ -154,104 +190,77 @@ export function AppShell() {
   }
 
   async function checkForUpdate() {
-    setIsCheckingUpdate(true);
-    setToast({ tone: 'success', message: 'Verificando atualização...' });
+    if (availableUpdate) {
+      setPendingUpdate(availableUpdate);
+      setUpdateModalOpen(true);
+      return;
+    }
+
+    setUpdateState('checking');
 
     try {
       const update = await updaterService.checkForUpdate();
       if (!update) {
+        setAvailableUpdate(null);
+        setUpdateState('updated');
         setToast({ tone: 'success', message: 'Sistema atualizado.' });
         return;
       }
 
+      setAvailableUpdate(update);
       setPendingUpdate(update);
+      setUpdateModalOpen(true);
+      setUpdateState('available');
       setToast({ tone: 'success', message: `Nova versão disponível: v${update.version}` });
     } catch {
-      setToast({ tone: 'success', message: 'Sem conexão. O sistema continua funcionando offline.' });
-    } finally {
-      setIsCheckingUpdate(false);
+      setUpdateState('error');
+      setToast({ tone: 'success', message: 'Sistema offline. Continuando normalmente.' });
     }
   }
 
   async function installPendingUpdate() {
     if (!pendingUpdate) return;
 
-    setIsInstallingUpdate(true);
+    setUpdateState('installing');
     setUpdateInstallStatus('Criando backup automático...');
     try {
       await updaterService.createAutomaticBackup();
     } catch {
       setToast({ tone: 'error', message: 'Não foi possível criar o backup automático. Atualização cancelada.' });
-      setIsInstallingUpdate(false);
+      setUpdateState('available');
       setUpdateInstallStatus('');
       return;
     }
 
     try {
+      setUpdateState('downloading');
       setUpdateInstallStatus('Baixando atualização...');
       setToast({ tone: 'success', message: 'Baixando atualização...' });
       await updaterService.downloadUpdate(pendingUpdate);
+      setUpdateState('installing');
       setUpdateInstallStatus('Instalando atualização...');
       setToast({ tone: 'success', message: 'Instalando atualização...' });
       await pendingUpdate.install();
       setPendingUpdate(null);
+      setAvailableUpdate(null);
+      setUpdateModalOpen(false);
+      setUpdateState('updated');
       setToast({ tone: 'success', message: 'Reinicie o sistema.' });
       await relaunch();
     } catch {
+      setUpdateState('error');
       setToast({ tone: 'error', message: 'Não foi possível instalar a atualização.' });
     } finally {
-      setIsInstallingUpdate(false);
       setUpdateInstallStatus('');
     }
   }
 
-  function renderHeaderAction() {
-    if (activePath === '/inicio' || activePath === '/vendas') {
-      return (
-        <Button size="sm" onClick={() => setActivePath('/vendas')}>
-          <Plus className="h-4 w-4" />
-          Nova venda
-        </Button>
-      );
-    }
-
-    if (activePath === '/clientes') {
-      return (
-        <Button
-          size="sm"
-          disabled={!isCashOpen}
-          onClick={() => {
-            if (!isCashOpen) {
-              setToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
-              return;
-            }
-            window.dispatchEvent(new CustomEvent('customers:create'));
-          }}
-        >
-          <Plus className="h-4 w-4" />
-          Novo cliente
-        </Button>
-      );
-    }
-
-    if (activePath === '/oficina') {
-      return (
-        <Button size="sm" variant="outline" onClick={() => setToast({ tone: 'success', message: 'Módulo em breve' })}>
-          <Plus className="h-4 w-4" />
-          Novo orçamento
-        </Button>
-      );
-    }
-
-    return null;
-  }
-
   return (
-    <div className="min-h-screen bg-background text-foreground">
+    <div className="h-screen overflow-hidden bg-background text-foreground">
       <aside
         className={clsx(
           'fixed inset-y-0 left-0 z-20 flex flex-col border-r border-sidebar-border bg-sidebar text-sidebar-foreground transition-all duration-200',
-          sidebarCollapsed ? 'w-[72px]' : 'w-60',
+          sidebarCollapsed ? 'w-[72px]' : 'w-60 max-[1024px]:w-[210px]',
         )}
       >
         <button
@@ -280,7 +289,7 @@ export function AppShell() {
           </div>
         </div>
 
-        <nav className="flex-1 space-y-5 px-3 py-4">
+        <nav className="min-h-0 flex-1 space-y-5 overflow-y-auto px-3 py-4 compact:space-y-3 compact:py-3">
           {(['Operação', 'Gestão'] as const).map((group) => (
             <div key={group}>
               {!sidebarCollapsed && (
@@ -341,72 +350,102 @@ export function AppShell() {
             {!sidebarCollapsed && (
               <div className="mt-2 flex items-center justify-between gap-2 text-xs text-muted-foreground">
                 <span>Operador: Admin · v{appVersion || '...'}</span>
-                <Button
-                  type="button"
-                  size="icon"
-                  variant="ghost"
-                  className="h-6 w-6"
-                  aria-label="Verificar atualização"
-                  disabled={isCheckingUpdate || isInstallingUpdate}
-                  onClick={() => void checkForUpdate()}
-                >
-                  <RefreshCw className={clsx('h-3.5 w-3.5', isCheckingUpdate && 'animate-spin')} />
-                </Button>
               </div>
             )}
           </div>
         </div>
       </aside>
 
-      <main className={clsx('min-h-screen transition-[padding] duration-200', sidebarCollapsed ? 'pl-[72px]' : 'pl-60')}>
-        <header className="sticky top-0 z-10 flex h-16 items-center gap-4 border-b border-border bg-card/95 px-6 backdrop-blur">
+      <main className={clsx('flex h-screen min-h-0 flex-col overflow-hidden transition-[padding] duration-200', sidebarCollapsed ? 'pl-[72px]' : 'pl-60 max-[1024px]:pl-[210px]')}>
+        <header className="z-10 flex h-16 flex-none items-center gap-4 border-b border-border bg-card/95 px-6 backdrop-blur compact:h-14 compact:px-4">
           <div className="min-w-0">
             <h1 className="text-base font-semibold">{activeRoute.label}</h1>
             <p className="text-xs text-muted-foreground">{activeRoute.subtitle}</p>
           </div>
           <div className="ml-4 flex-1" />
-          {renderHeaderAction()}
+          <Button
+            type="button"
+            size="icon"
+            variant="outline"
+            className="relative"
+            aria-label="Verificar atualização"
+            title={updateTooltip}
+            disabled={updateState === 'downloading' || updateState === 'installing'}
+            onClick={() => void checkForUpdate()}
+          >
+            <RefreshCw className={clsx('h-4 w-4', updateBusy && 'animate-spin')} />
+            {availableUpdate && (
+              <span className="absolute right-1 top-1 h-2 w-2 animate-pulse rounded-full bg-blue-500 ring-2 ring-background" />
+            )}
+          </Button>
           <Button variant="outline" size="icon" onClick={toggleTheme} aria-label="Alternar tema">
             {theme === 'light' ? <Moon className="h-4 w-4" /> : <Sun className="h-4 w-4" />}
           </Button>
         </header>
 
         {!isCashOpen && (
-          <div className="border-b border-warning/30 bg-warning/10 px-6 py-3 text-sm text-warning">
+          <div className="flex-none border-b border-warning/30 bg-warning/10 px-6 py-3 text-sm text-warning compact:px-4 compact:py-2">
             Caixa fechado. Abra o caixa para operar o sistema.
             <Badge className="ml-3" variant="warning">Operações bloqueadas</Badge>
           </div>
         )}
 
-        {renderPage()}
+        <div className="min-h-0 flex-1 overflow-hidden">
+          {renderPage()}
+        </div>
       </main>
       {cashAction && (
-        <MasterPasswordVerifyModal
-          title={cashAction === 'open' ? 'Abrir caixa' : 'Fechar caixa'}
-          onCancel={() => setCashAction(null)}
-          onVerified={async (password) => {
-            try {
-              if (cashAction === 'open') {
+        cashAction === 'open' ? (
+          <MasterPasswordVerifyModal
+            title="Abrir caixa"
+            onCancel={() => setCashAction(null)}
+            onVerified={async (password) => {
+              try {
                 await openCash(0, password);
+                await queryClient.invalidateQueries({ queryKey: ['home-dashboard'] });
                 setToast({ tone: 'success', message: 'Caixa aberto com sucesso.' });
-              } else {
-                await closeCash(undefined, password);
-                setToast({ tone: 'success', message: 'Caixa fechado com sucesso.' });
+              } catch (caught) {
+                const message = getErrorMessage(caught);
+                setToast({ tone: 'error', message });
+                throw caught;
+              } finally {
+                setCashAction(null);
               }
-            } catch {
-              setToast({ tone: 'error', message: 'Nao foi possivel atualizar o caixa.' });
-            }
-            setCashAction(null);
-          }}
-        />
+            }}
+          />
+        ) : (
+          <CloseCashModal
+            expectedAmountCents={expectedAmountCents}
+            onCancel={() => setCashAction(null)}
+            onConfirm={async (reportedAmountCents, password) => {
+              if (isDev) {
+                console.debug('close_cash_session payload', {
+                  reportedAmountCents,
+                  expectedAmountCents,
+                });
+              }
+              try {
+                await closeCash(reportedAmountCents, password);
+                await queryClient.invalidateQueries({ queryKey: ['home-dashboard'] });
+                setToast({ tone: 'success', message: 'Caixa fechado com sucesso.' });
+              } catch (caught) {
+                const message = getErrorMessage(caught);
+                setToast({ tone: 'error', message });
+                throw caught;
+              } finally {
+                setCashAction(null);
+              }
+            }}
+          />
+        )
       )}
-      {pendingUpdate && (
+      {pendingUpdate && updateModalOpen && (
         <UpdateAvailableModal
           currentVersion={appVersion || '0.1.5'}
           update={pendingUpdate}
-          busy={isInstallingUpdate}
+          busy={updateState === 'downloading' || updateState === 'installing'}
           status={updateInstallStatus}
-          onClose={() => setPendingUpdate(null)}
+          onClose={() => setUpdateModalOpen(false)}
           onConfirm={() => void installPendingUpdate()}
         />
       )}
@@ -421,6 +460,60 @@ export function AppShell() {
   );
 }
 
+function CloseCashModal({
+  expectedAmountCents,
+  onCancel,
+  onConfirm,
+}: {
+  expectedAmountCents: number;
+  onCancel: () => void;
+  onConfirm: (reportedAmountCents: number, password: string) => Promise<void> | void;
+}) {
+  const [password, setPassword] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  return (
+    <DialogShell title="Fechar caixa" onClose={onCancel} className="max-w-[420px]" zIndexClassName="z-[60]">
+      <form
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
+        onSubmit={async (event) => {
+          event.preventDefault();
+          if (!password) {
+            setError('Informe a senha master.');
+            return;
+          }
+          setBusy(true);
+          setError('');
+          try {
+            await onConfirm(expectedAmountCents, password);
+          } catch (caught) {
+            setError(getErrorMessage(caught));
+          } finally {
+            setBusy(false);
+          }
+        }}
+      >
+        <DialogBody className="grid gap-3">
+          <div className="grid gap-1">
+            <label className="text-xs font-medium text-muted-foreground">Senha master</label>
+            <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha master" />
+          </div>
+          {error && <p className="text-sm text-destructive">{error}</p>}
+        </DialogBody>
+        <StickyDialogFooter>
+          <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancelar</Button>
+          <Button type="submit" disabled={busy}>{busy ? 'Processando...' : 'Confirmar'}</Button>
+        </StickyDialogFooter>
+      </form>
+    </DialogShell>
+  );
+}
+
+function getErrorMessage(error: unknown) {
+  return error instanceof Error ? error.message : 'Erro ao concluir operacao.';
+}
+
 
 function initials(value: string) {
   return value
@@ -430,4 +523,13 @@ function initials(value: string) {
     .map((part) => part[0])
     .join('')
     .toUpperCase() || 'LM';
+}
+
+function getUpdateTooltip(state: UpdateUxState, hasUpdate: boolean) {
+  if (state === 'checking') return 'Verificando atualização...';
+  if (state === 'downloading') return 'Baixando atualização...';
+  if (state === 'installing') return 'Instalando atualização...';
+  if (state === 'error') return 'Não foi possível verificar atualização';
+  if (hasUpdate || state === 'available') return 'Nova atualização disponível';
+  return 'Verificar atualização';
 }

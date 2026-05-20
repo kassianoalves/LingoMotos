@@ -14,19 +14,19 @@ type CartPanelProps = {
 export function CartPanel({ items, onQuantityChange, onRemove }: CartPanelProps) {
   return (
     <Card className="flex h-full min-h-0 flex-col">
-      <CardHeader className="flex flex-row items-center justify-between space-y-1 p-4 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1.5">
         <div>
-          <CardTitle>Carrinho</CardTitle>
-          <p className="text-sm text-muted-foreground">{items.length} itens na venda atual.</p>
+          <CardTitle className="text-sm">Carrinho</CardTitle>
+          <p className="text-xs text-muted-foreground">{items.length} itens na venda atual.</p>
         </div>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col p-4 pt-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col p-2 pt-0">
         <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
           {items.map((item) => {
             const lineTotal = Math.max(Math.round(item.quantity * item.unitPriceCents) - item.discountCents, 0);
 
             return (
-              <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_128px] gap-3 border-b border-border p-3">
+              <div key={item.id} className="grid grid-cols-[minmax(0,1fr)_104px] gap-2 border-b border-border px-2 py-1.5">
                 <div className="min-w-0">
                   <div className="flex items-center gap-2">
                     <p className="truncate text-sm font-semibold">{item.name}</p>
@@ -36,10 +36,11 @@ export function CartPanel({ items, onQuantityChange, onRemove }: CartPanelProps)
                     {item.sku} · {formatCurrency(item.unitPriceCents)} · estoque {item.stockAvailable}
                   </p>
 
-                  <div className="mt-3 flex items-center gap-2">
+                  <div className="mt-1.5 flex items-center gap-1.5">
                     <Button
                       variant="outline"
                       size="icon"
+                      className="h-7 w-7"
                       onClick={() => onQuantityChange(item.id, item.quantity - 1)}
                     >
                       <Minus className="h-4 w-4" />
@@ -48,6 +49,7 @@ export function CartPanel({ items, onQuantityChange, onRemove }: CartPanelProps)
                     <Button
                       variant="outline"
                       size="icon"
+                      className="h-7 w-7"
                       onClick={() => onQuantityChange(item.id, item.quantity + 1)}
                     >
                       <Plus className="h-4 w-4" />
@@ -56,7 +58,7 @@ export function CartPanel({ items, onQuantityChange, onRemove }: CartPanelProps)
                 </div>
 
                 <div className="flex flex-col items-end justify-between">
-                  <Button variant="ghost" size="icon" onClick={() => onRemove(item.id)}>
+                  <Button variant="ghost" size="icon" className="h-7 w-7" onClick={() => onRemove(item.id)}>
                     <Trash2 className="h-4 w-4" />
                   </Button>
                   <div className="text-right">

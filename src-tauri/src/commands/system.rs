@@ -1,6 +1,6 @@
 use crate::app_state::AppState;
 use crate::error::{AppError, AppResult};
-use crate::services::offline_service::{BackupDto, BackupMaintenanceDto, OfflineService, OfflineStatusDto};
+use crate::services::offline_service::{AutoBackupSummaryDto, BackupDto, BackupMaintenanceDto, OfflineService, OfflineStatusDto};
 use crate::services::system_service::{SystemHealthDto, SystemService};
 use bcrypt::{hash, verify};
 use rusqlite::OptionalExtension;
@@ -99,6 +99,21 @@ pub fn create_auto_update_backup(state: State<'_, AppState>) -> AppResult<Backup
 }
 
 #[tauri::command]
+pub fn create_before_restore_backup(state: State<'_, AppState>, password: String) -> AppResult<BackupDto> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let verify_started = Instant::now();
+    require_master_password(&db, &password)?;
+    debug_timing("master_password.verify.create_before_restore_backup", verify_started);
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.create_before_restore_backup()
+}
+
+#[tauri::command]
 pub fn ensure_daily_backup(state: State<'_, AppState>) -> AppResult<BackupMaintenanceDto> {
     let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
     let service = OfflineService::new(
@@ -125,6 +140,18 @@ pub fn get_auto_backup_interval_hours(state: State<'_, AppState>) -> AppResult<i
         state.backup_dir.clone(),
     );
     service.auto_backup_interval_hours()
+}
+
+#[tauri::command]
+pub fn get_auto_backup_summary(state: State<'_, AppState>) -> AppResult<AutoBackupSummaryDto> {
+    let db = state.db.lock().map_err(|_| AppError::StateUnavailable)?;
+    let service = OfflineService::new(
+        &db,
+        state.db_path.clone(),
+        state.data_dir.clone(),
+        state.backup_dir.clone(),
+    );
+    service.auto_backup_summary()
 }
 
 #[tauri::command]
@@ -182,6 +209,11 @@ pub fn list_database_backups(state: State<'_, AppState>) -> AppResult<Vec<Backup
 
 #[tauri::command]
 pub fn restore_database_backup(state: State<'_, AppState>, backup_path: String, password: String) -> AppResult<BackupDto> {
+    restore_backup(state, backup_path, password)
+}
+
+#[tauri::command]
+pub fn restore_database_backup_from_path(state: State<'_, AppState>, backup_path: String, password: String) -> AppResult<BackupDto> {
     restore_backup(state, backup_path, password)
 }
 

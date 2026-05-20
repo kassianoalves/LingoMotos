@@ -3,7 +3,7 @@ export type BackupInfo = {
   path: string;
   size_bytes: number;
   created_at: string;
-  backup_type: 'automatic' | 'pre-update' | 'manual-legacy';
+  backup_type: 'automatic' | 'pre-update' | 'before-restore' | 'manual-legacy';
 };
 
 export type OfflineStatus = {
@@ -22,4 +22,13 @@ export type BackupMaintenance = {
   deleted_auto_backups: number;
   interval_hours: number;
   next_check_after_ms: number;
+};
+
+export type AutoBackupSummary = {
+  last_backup_at: string | null;
+  last_file_name: string | null;
+  status: 'created' | 'restored' | 'failed' | 'pending';
+  error_message: string | null;
+  next_backup_at: string | null;
+  interval_hours: number;
 };

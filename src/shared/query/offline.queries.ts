@@ -5,6 +5,7 @@ export const offlineQueryKeys = {
   all: ['offline'] as const,
   status: () => [...offlineQueryKeys.all, 'status'] as const,
   backups: () => [...offlineQueryKeys.all, 'backups'] as const,
+  autoBackupSummary: () => [...offlineQueryKeys.all, 'auto-backup-summary'] as const,
   autoBackupInterval: () => [...offlineQueryKeys.all, 'auto-backup-interval'] as const,
 };
 
@@ -26,6 +27,14 @@ export function useBackups() {
   });
 }
 
+export function useAutoBackupSummary() {
+  return useQuery({
+    queryKey: offlineQueryKeys.autoBackupSummary(),
+    queryFn: () => offlineService.autoBackupSummary(),
+    staleTime: 30_000,
+  });
+}
+
 export function useAutoBackupInterval() {
   return useQuery({
     queryKey: offlineQueryKeys.autoBackupInterval(),
@@ -41,6 +50,7 @@ export function useSaveAutoBackupInterval() {
     mutationFn: (intervalHours: number) => offlineService.setAutoBackupIntervalHours(intervalHours),
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.autoBackupInterval() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.autoBackupSummary() });
     },
   });
 }
@@ -53,6 +63,7 @@ export function useCreateBackup() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.backups() });
       void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.status() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.autoBackupSummary() });
     },
   });
 }
@@ -65,6 +76,7 @@ export function useRestoreBackup() {
     onSuccess: () => {
       void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.backups() });
       void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.status() });
+      void queryClient.invalidateQueries({ queryKey: offlineQueryKeys.autoBackupSummary() });
     },
   });
 }

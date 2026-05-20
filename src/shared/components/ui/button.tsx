@@ -16,9 +16,9 @@ const buttonVariants = cva(
       },
       size: {
         sm: 'h-8 px-3 text-xs',
-        default: 'h-9 px-4',
-        lg: 'h-10 px-5',
-        icon: 'h-9 w-9',
+        default: 'h-9 px-4 compact:h-8',
+        lg: 'h-10 px-5 compact:h-9',
+        icon: 'h-9 w-9 compact:h-8 compact:w-8',
       },
     },
     defaultVariants: {
@@ -38,4 +38,3 @@ export function Button({ className, variant, size, asChild = false, ...props }: 
 
   return <Comp className={cn(buttonVariants({ variant, size, className }))} {...props} />;
 }
-

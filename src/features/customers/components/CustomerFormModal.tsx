@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
+import { DialogBody, DialogShell, StickyDialogFooter } from '@shared/components/layout';
 import type { Customer, CustomerInput } from '../types/customer.types';
 import { formatBrazilianPhone, sanitizePhone } from '../utils/customer-phone';
 import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
 
 export function emptyCustomer(): Customer {
-  return { id: '', name: '', phone: '', whatsapp: '', documentNumber: '', email: '', address: '', notes: '', updatedAt: '' };
+  return { id: '', name: '', phone: '', whatsapp: '', motorcycleModel: '', documentNumber: '', email: '', address: '', notes: '', updatedAt: '' };
 }
 
 export function CustomerFormModal({
@@ -22,9 +23,14 @@ export function CustomerFormModal({
   const [saving, setSaving] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
+    <DialogShell
+      title={customer.id ? 'Editar cliente' : 'Novo cliente'}
+      description="Dados de contato e cadastro do cliente."
+      onClose={onClose}
+      className="max-w-[720px]"
+    >
       <form
-        className="w-[720px] rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         onSubmit={async (event) => {
           event.preventDefault();
           setSaving(true);
@@ -33,6 +39,7 @@ export function CustomerFormModal({
               ...values,
               phone: sanitizePhone(values.phone),
               whatsapp: sanitizePhone(values.whatsapp || values.phone),
+              motorcycleModel: values.motorcycleModel.trim(),
               documentNumber: onlyDigits(values.documentNumber),
             });
           } finally {
@@ -40,11 +47,8 @@ export function CustomerFormModal({
           }
         }}
       >
-        <div>
-          <h3 className="text-base font-semibold">{customer.id ? 'Editar cliente' : 'Novo cliente'}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Dados de contato e cadastro do cliente.</p>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <DialogBody>
+        <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
           <Field label="Nome completo" className="md:col-span-2">
             <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
           </Field>
@@ -53,6 +57,9 @@ export function CustomerFormModal({
           </Field>
           <Field label="WhatsApp">
             <Input value={formatBrazilianPhone(values.whatsapp)} onChange={(event) => setValues({ ...values, whatsapp: event.target.value })} inputMode="tel" />
+          </Field>
+          <Field label="Modelo da moto">
+            <Input value={values.motorcycleModel} onChange={(event) => setValues({ ...values, motorcycleModel: event.target.value })} />
           </Field>
           <Field label="CPF/CNPJ">
             <Input value={formatCpfCnpj(values.documentNumber)} onChange={(event) => setValues({ ...values, documentNumber: event.target.value })} inputMode="numeric" />
@@ -67,12 +74,13 @@ export function CustomerFormModal({
             <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
           </Field>
         </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={saving}>Salvar alteracoes</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }
 

@@ -25,35 +25,34 @@ export function InventoryToolbar({
   onImport,
 }: InventoryToolbarProps) {
   return (
-    <div className="space-y-3">
-      <div className="flex gap-3">
-        <div className="relative flex-1">
+    <div className="space-y-2">
+      <div className="flex flex-wrap items-center gap-2">
+        <div className="relative min-w-[200px] flex-1 max-[1100px]:max-w-[300px]">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
-            autoFocus
-            className="h-11 pl-9"
+            className="h-8 border-border pl-9 focus-visible:ring-2 focus-visible:ring-primary/40"
             value={filters.search}
             onChange={(event) => onSearchChange(event.target.value)}
-            placeholder="Buscar por produto, SKU / código interno, código de barras, marca ou aplicação"
+            placeholder="Buscar produto, SKU, código ou marca"
           />
         </div>
-        <Button onClick={onNewProduct}>
+        <Button className="h-8 px-3" onClick={onNewProduct}>
           <Plus className="h-4 w-4" />
           Produto
         </Button>
-        <Button variant="outline" onClick={onMovement}>
+        <Button className="h-8 px-3" variant="outline" onClick={onMovement}>
           <PackagePlus className="h-4 w-4" />
           Movimentar
         </Button>
-        <Button variant="outline" onClick={onImport}>
+        <Button className="h-8 px-3" variant="outline" onClick={onImport}>
           Importar
         </Button>
       </div>
 
-      <div className="flex flex-wrap items-center gap-2">
+      <div className="grid grid-cols-[auto_repeat(4,minmax(112px,1fr))] items-center gap-2 max-[1100px]:grid-cols-[auto_repeat(4,minmax(0,1fr))]">
         <SlidersHorizontal className="h-4 w-4 text-muted-foreground" />
         <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           value={filters.stockStatus}
           onChange={(event) => onFilterChange('stockStatus', event.target.value as InventoryFilters['stockStatus'])}
         >
@@ -65,7 +64,7 @@ export function InventoryToolbar({
         </select>
 
         <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           value={filters.categoryId}
           onChange={(event) => onFilterChange('categoryId', event.target.value)}
         >
@@ -78,7 +77,7 @@ export function InventoryToolbar({
         </select>
 
         <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           value={filters.supplierId}
           onChange={(event) => onFilterChange('supplierId', event.target.value)}
         >
@@ -91,7 +90,7 @@ export function InventoryToolbar({
         </select>
 
         <select
-          className="h-9 rounded-md border border-input bg-background px-3 text-sm"
+          className="h-8 rounded-md border border-border bg-background px-2 text-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/40"
           value={filters.sortBy}
           onChange={(event) => onFilterChange('sortBy', event.target.value as InventoryFilters['sortBy'])}
         >

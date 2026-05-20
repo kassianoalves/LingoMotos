@@ -6,6 +6,7 @@ type CustomerDto = {
   name: string;
   phone: string;
   whatsapp: string;
+  motorcycleModel: string;
   documentNumber: string;
   email: string;
   address: string;
@@ -36,6 +37,7 @@ function fromDto(customer: CustomerDto): Customer {
     name: customer.name,
     phone: customer.phone,
     whatsapp: customer.whatsapp,
+    motorcycleModel: customer.motorcycleModel,
     documentNumber: customer.documentNumber,
     email: customer.email,
     address: customer.address,

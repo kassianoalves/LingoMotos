@@ -187,6 +187,8 @@ export type ImportColumnKey =
   | 'notes'
   | 'unit';
 
+export type ImportColumnType = 'text' | 'integer' | 'currency' | 'date' | 'boolean' | 'code' | 'phone_document';
+
 export type ImportColumnTarget =
   | { kind: 'known'; field: ImportColumnKey }
   | { kind: 'custom'; fieldKey: string; fieldLabel: string; fieldType: ProductCustomFieldType };
@@ -195,12 +197,21 @@ export type ImportColumnMapping = Record<string, ImportColumnTarget>;
 
 export type ImportSourceData = {
   fileName: string;
+  fileType: 'csv' | 'xls' | 'xlsx';
   sheetName?: string;
   headers: string[];
+  columns: Array<{
+    header: string;
+    originalHeader: string;
+    sampleValues: string[];
+    detectedType: ImportColumnType;
+    suggestedField: ImportColumnKey;
+    confidence: 'high' | 'medium' | 'low';
+  }>;
   rows: Array<Record<string, string>>;
 };
 
-export type ImportDuplicateStrategy = 'skip' | 'update_prices' | 'update_all';
+export type ImportDuplicateStrategy = 'skip' | 'update_existing' | 'create_new';
 
 export type ProductImportOptions = {
   duplicateStrategy: ImportDuplicateStrategy;
@@ -215,8 +226,10 @@ export type ProductImportDraft = {
     categoryName: string;
     supplierName: string;
   };
+  status: 'ok' | 'warning' | 'error' | 'ignored';
   action: 'create' | 'update' | 'skip' | 'error';
   duplicateProductId?: string;
+  duplicateReason?: string;
   errors: string[];
   warnings: string[];
   skuGeneratedAutomatically: boolean;

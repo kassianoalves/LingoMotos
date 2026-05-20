@@ -67,6 +67,8 @@ macro_rules! with_repo {
     result
 }
 #[tauri::command] pub fn close_cash_session(state: State<'_, AppState>, reported_amount_cents: i64, password: String) -> AppResult<()> {
+    #[cfg(debug_assertions)]
+    eprintln!("close_cash_session payload: reported_amount_cents={reported_amount_cents}");
     {
         let db = db(&state)?;
         let verify_started = Instant::now();

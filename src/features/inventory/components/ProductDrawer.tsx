@@ -10,6 +10,7 @@ import {
   formatCurrency,
   getStockStatus,
 } from '../utils/inventory-calculations';
+import { DrawerShell } from '@shared/components/layout';
 
 type ProductDrawerProps = {
   product: Product | null;
@@ -36,8 +37,8 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }
   const status = getStockStatus(product);
 
   return (
-    <aside className="fixed inset-y-0 right-0 z-30 w-[420px] border-l border-border bg-card shadow-lg">
-      <div className="flex h-16 items-center justify-between border-b border-border px-5">
+    <DrawerShell>
+      <div className="flex h-16 flex-none items-center justify-between border-b border-border px-5 compact:h-14 compact:px-4">
         <div className="min-w-0">
           <p className="truncate text-sm font-semibold">{product.name}</p>
           <p className="text-xs text-muted-foreground">SKU / Código interno: {product.sku}</p>
@@ -47,7 +48,7 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }
         </Button>
       </div>
 
-      <div className="space-y-4 overflow-auto p-5">
+      <div className="min-h-0 flex-1 space-y-4 overflow-auto p-5 compact:space-y-3 compact:p-3">
         <div className="flex gap-2">
           <Button size="sm" onClick={() => onMovement(product)}>Movimentar</Button>
           <Button variant="outline" size="sm" onClick={() => onEdit(product)}>Editar</Button>
@@ -97,7 +98,7 @@ export function ProductDrawer({ product, onClose, onEdit, onMovement, onRemove }
           </CardContent>
         </Card>
       </div>
-    </aside>
+    </DrawerShell>
   );
 }
 

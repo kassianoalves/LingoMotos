@@ -20,13 +20,13 @@ import type { SaleDiscountInput } from '../types/pos.types';
 import { useStoreSettingsStore } from '@shared/stores/store-settings.store';
 import { QrCodeModal } from '@shared/components/QrCodeModal';
 import { buildPixPayload } from '@/utils/pix';
+import { PageContainer } from '@shared/components/layout';
 
 export function PosPage({ cashOpen }: { cashOpen: boolean }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const [paymentAmount, setPaymentAmount] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PosPaymentMethod>('cash');
   const [creditInstallments, setCreditInstallments] = useState(1);
-  const [creditInterestRate, setCreditInterestRate] = useState('');
   const [checkoutResult, setCheckoutResult] = useState<PosCheckoutResult | null>(null);
   const [customerModalOpen, setCustomerModalOpen] = useState(false);
   const [toast, setToast] = useState('');
@@ -104,17 +104,6 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
     focusSearch();
   }, [clearSale, focusSearch]);
 
-  const handleApplySaleDiscount = useCallback(() => {
-    const parsed = Number(discountInput.replace(',', '.'));
-
-    if (!Number.isFinite(parsed) || parsed < 0 || parsed > 100) {
-      setToast('Informe um desconto valido entre 0 e 100.');
-      return;
-    }
-
-    setToast(parsed === 0 ? 'Desconto removido da venda.' : `Desconto de ${parsed}% aplicado.`);
-  }, [discountInput]);
-
   const handleCheckout = useCallback(async () => {
     setCheckoutResult(null);
     setLastError('');
@@ -156,7 +145,7 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
 
   if (!cashOpen) {
     return (
-      <div className="px-6 pb-6 pt-4">
+      <PageContainer>
         <Card>
           <CardContent className="p-6">
             <h2 className="text-xl font-semibold">Venda bloqueada</h2>
@@ -165,18 +154,18 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
             </p>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="flex h-[calc(100vh-4rem)] min-h-0 flex-col overflow-hidden px-6 pb-6 pt-3">
+    <PageContainer className="pt-0">
 
-      <div className="flex items-center gap-2 -mx-6 -mt-3 px-6 pt-3 pb-4 border-b border-border bg-card">
-        <label className="flex items-center gap-2 text-sm min-w-fit">
+      <div className="-mx-5 flex h-12 flex-none items-center gap-2 border-b border-border bg-card px-5 py-2 compact:-mx-4 compact:h-10 compact:px-4 compact:py-1">
+        <label className="flex min-w-0 flex-1 items-center gap-2 text-sm">
           <span className="text-xs font-medium whitespace-nowrap">Cliente</span>
           <select
-            className="h-8 rounded-md border border-input bg-background px-2 text-sm"
+            className="h-8 min-w-0 flex-1 rounded-md border border-input bg-background px-2 text-sm compact:h-8"
             value={selectedCustomer?.id ?? ''}
             onChange={(event) => selectCustomer(customers.find((customer) => customer.id === event.target.value) ?? null)}
           >
@@ -191,28 +180,30 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
         </Button>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 mt-4 xl:grid-cols-[minmax(300px,0.8fr)_minmax(420px,1fr)_minmax(300px,0.7fr)]">
-        <ProductSearchPanel
-          inputRef={inputRef}
-          query={search}
-          products={products}
-          selectedIndex={selectedIndex}
-          onQueryChange={(value) => void handleSearchChange(value)}
-          onSelectedIndexChange={setSelectedIndex}
-          onAddProduct={(product) => {
-            addProduct(product);
-            setCheckoutResult(null);
-            focusSearch();
-          }}
-        />
+      <div className="mt-2 grid min-h-0 flex-1 grid-cols-[minmax(0,1.28fr)_minmax(310px,0.72fr)] gap-2">
+        <div className="grid min-h-0 grid-rows-[minmax(145px,0.8fr)_minmax(175px,1.2fr)] gap-2">
+          <ProductSearchPanel
+            inputRef={inputRef}
+            query={search}
+            products={products}
+            selectedIndex={selectedIndex}
+            onQueryChange={(value) => void handleSearchChange(value)}
+            onSelectedIndexChange={setSelectedIndex}
+            onAddProduct={(product) => {
+              addProduct(product);
+              setCheckoutResult(null);
+              focusSearch();
+            }}
+          />
 
-        <CartPanel
-          items={items}
-          onQuantityChange={updateQuantity}
-          onRemove={removeItem}
-        />
+          <CartPanel
+            items={items}
+            onQuantityChange={updateQuantity}
+            onRemove={removeItem}
+          />
+        </div>
 
-        <div className="flex min-h-0 flex-col gap-4">
+        <div className="flex min-h-0 flex-col gap-3 compact:gap-2">
           <PaymentPanel
             payments={payments}
             paymentAmount={paymentAmount}
@@ -221,8 +212,6 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
             onMethodChange={setPaymentMethod}
             installments={creditInstallments}
             onInstallmentsChange={setCreditInstallments}
-            interestRate={creditInterestRate}
-            onInterestRateChange={setCreditInterestRate}
             discountInput={discountInput}
             onDiscountInputChange={(value) => setDiscountInput(value.replace(/[^\d,.]/g, ''))}
             onAddPayment={(method, amountCents, options) => {
@@ -241,7 +230,6 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
             payments={payments}
             paymentMethod={paymentMethod}
             creditInstallments={creditInstallments}
-            creditInterestRate={creditInterestRate}
             paymentAmount={paymentAmount}
             saleDiscount={saleDiscount}
             onGeneratePix={() => {
@@ -283,6 +271,6 @@ export function PosPage({ cashOpen }: { cashOpen: boolean }) {
           onClose={() => setPixQr(null)}
         />
       )}
-    </div>
+    </PageContainer>
   );
 }

@@ -17,7 +17,6 @@ type SaleSummaryPanelProps = {
   payments: PaymentLine[];
   paymentMethod: PosPaymentMethod;
   creditInstallments: number;
-  creditInterestRate: string;
   paymentAmount?: string;
   saleDiscount?: SaleDiscountInput;
 };
@@ -34,33 +33,23 @@ export function SaleSummaryPanel({
   payments = [],
   paymentMethod,
   creditInstallments,
-  creditInterestRate,
   paymentAmount = '',
   saleDiscount,
 }: SaleSummaryPanelProps) {
   const hasProducts = totals.subtotalCents > 0;
   const paymentCents = parseBRLInputToCents(paymentAmount);
+  const lastPayment = [...payments].reverse()[0];
+  const paymentBaseCents = lastPayment?.baseAmountCents ?? paymentCents;
   
   // Usa o pagamento adicionado se existir, senão usa o input atual
-  const baseSubtotalCents = totals.paidCents > 0 ? totals.paidCents : (paymentCents > 0 ? paymentCents : totals.subtotalCents);
+  const baseSubtotalCents = paymentBaseCents > 0 ? paymentBaseCents : totals.subtotalCents;
   
   // Se não há produtos mas há valor (recebido ou adicionado como pagamento) e desconto, calcular baseado nele
   const displaySubtotalCents = !hasProducts && baseSubtotalCents > 0 ? baseSubtotalCents : totals.subtotalCents;
   const displayDiscountCents = !hasProducts && baseSubtotalCents > 0 && saleDiscount?.type === 'percentage'
     ? Math.round((baseSubtotalCents * (saleDiscount.percentage || 0)) / 100)
     : totals.saleDiscountCents;
-  const liveInterestRate = Number(creditInterestRate.replace(',', '.'));
-  const draftCreditFeeCents =
-    paymentMethod === 'credit_card' && paymentCents > 0 && Number.isFinite(liveInterestRate) && liveInterestRate > 0
-      ? Math.round((paymentCents * liveInterestRate) / 100)
-      : 0;
-  const paymentCreditFeeCents = payments.reduce((total, payment) => {
-    if (payment.method !== 'credit_card') return total;
-    if (typeof payment.baseAmountCents !== 'number') return total;
-    return total + Math.max(payment.amountCents - payment.baseAmountCents, 0);
-  }, 0);
-  const creditFeeCents = draftCreditFeeCents + paymentCreditFeeCents;
-  const displayTotalCents = Math.max(displaySubtotalCents - displayDiscountCents + creditFeeCents, 0);
+  const displayTotalCents = Math.max(displaySubtotalCents - displayDiscountCents, 0);
 
   const paymentTypes = [...new Set(payments.map((payment) => {
     const label = paymentMethodLabels[payment.method];
@@ -72,8 +61,12 @@ export function SaleSummaryPanel({
     return label;
   }))];
   const paymentTypeLabel = paymentTypes.length > 0 ? paymentTypes.join(' + ') : 'Não informado';
-  const lastCreditPayment = [...payments].reverse().find((payment) => payment.method === 'credit_card');
-  const installmentsLabel = paymentMethod === 'credit_card' ? `${creditInstallments}x` : `${lastCreditPayment?.installments ?? 1}x`;
+  const activeCreditPayment = [...payments].reverse().find((payment) => payment.method === 'credit_card');
+  const activeInstallments = activeCreditPayment?.installments ?? (paymentMethod === 'credit_card' ? creditInstallments : 1);
+  const activeInstallmentAmountCents = Math.round(displayTotalCents / Math.max(activeInstallments, 1));
+  const installmentsLabel = activeInstallments > 1
+    ? `${activeInstallments}x de ${formatCurrency(activeInstallmentAmountCents)}`
+    : '1x';
   
   // Calcular pago e troco baseado no total com desconto
   const paidCents = hasProducts ? totals.paidCents : (displayTotalCents > 0 ? displayTotalCents : 0);
@@ -81,18 +74,17 @@ export function SaleSummaryPanel({
 
   return (
     <Card className="flex min-h-0 flex-1 flex-col">
-      <CardHeader className="space-y-1 p-3 pb-2">
-        <CardTitle>Resumo da venda</CardTitle>
+      <CardHeader className="space-y-0 p-3 pb-2 compact:p-2">
+        <CardTitle className="text-sm">Resumo da venda</CardTitle>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pt-0">
-        <div className="min-h-0 flex-1 space-y-3 overflow-auto pr-1">
-          <div className="rounded-md border border-border bg-muted/20 p-4">
-            <div className="space-y-3 text-[15px]">
+      <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pt-0 compact:p-2">
+        <div className="min-h-0 flex-1 space-y-2 overflow-auto pr-1">
+          <div className="rounded-md border border-border bg-muted/20 p-3 compact:p-2">
+            <div className="space-y-2 text-sm">
               <SummaryRow label="Subtotal" value={formatCurrency(displaySubtotalCents)} />
               <SummaryRow label="Desconto" value={formatCurrency(displayDiscountCents)} />
               <SummaryRow label="Tipo de pagamento" value={paymentTypeLabel} />
-              <SummaryRow label="Parcelas" value={paymentMethod === 'credit_card' || paymentCreditFeeCents > 0 ? installmentsLabel : '1x'} />
-              <SummaryRow label="Taxa" value={formatCurrency(creditFeeCents)} />
+              <SummaryRow label="Parcelas" value={activeInstallments > 1 || paymentMethod === 'credit_card' ? installmentsLabel : '1x'} />
 
               <div className="my-2 border-t border-border/60" />
 
@@ -130,7 +122,7 @@ export function SaleSummaryPanel({
           )}
         </div>
 
-        <div className="mt-2 grid grid-cols-2 gap-2 border-t border-border/60 bg-card pt-2">
+        <div className="sticky bottom-0 mt-2 grid grid-cols-2 gap-2 border-t border-border/60 bg-card pt-2">
           <Button className="h-9 min-w-0 px-2" variant="outline" onClick={onClear}>Cancelar</Button>
           <Button className="h-9 min-w-0 px-2" onClick={onCheckout} disabled={pending}>Finalizar venda</Button>
         </div>

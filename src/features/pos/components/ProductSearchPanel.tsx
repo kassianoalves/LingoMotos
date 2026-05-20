@@ -43,14 +43,14 @@ export function ProductSearchPanel({
 
   return (
     <Card className="flex h-full min-h-0 flex-col">
-      <CardHeader className="flex flex-row items-center justify-between space-y-1 p-4 pb-2">
+      <CardHeader className="flex flex-row items-center justify-between space-y-0 p-2 pb-1.5">
         <div>
-          <CardTitle>Buscar produto</CardTitle>
-          <p className="text-sm text-muted-foreground">Digite ou leia o código de barras.</p>
+          <CardTitle className="text-sm">Buscar produto</CardTitle>
+          <p className="text-xs text-muted-foreground">Digite ou leia o código.</p>
         </div>
         <Badge variant="secondary">Leitor pronto</Badge>
       </CardHeader>
-      <CardContent className="flex min-h-0 flex-1 flex-col space-y-3 p-4 pt-0">
+      <CardContent className="flex min-h-0 flex-1 flex-col space-y-1.5 p-2 pt-0">
         <div className="relative">
           <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
           <Input
@@ -58,7 +58,7 @@ export function ProductSearchPanel({
             value={query}
             onChange={(event) => onQueryChange(event.target.value)}
             onKeyDown={handleKeyDown}
-            className="h-11 pl-10 text-base"
+            className="h-8 pl-10 text-sm"
             placeholder="Produto, SKU / código interno ou código de barras"
           />
           <Barcode className="absolute right-3 top-1/2 h-5 w-5 -translate-y-1/2 text-muted-foreground" />
@@ -70,7 +70,7 @@ export function ProductSearchPanel({
               key={product.id}
               type="button"
               className={[
-                'grid w-full grid-cols-[minmax(0,1fr)_120px_92px] items-center gap-3 border-b border-border p-3 text-left transition-colors hover:bg-muted/50',
+                'grid w-full grid-cols-[minmax(0,1fr)_100px_70px] items-center gap-2 border-b border-border px-2 py-1.5 text-left transition-colors hover:bg-muted/50',
                 selectedIndex === index ? 'bg-accent text-accent-foreground' : '',
               ].join(' ')}
               onMouseEnter={() => onSelectedIndexChange(index)}

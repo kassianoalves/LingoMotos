@@ -51,6 +51,22 @@ Substitua `YOUR_GITHUB_USERNAME` antes da primeira release real.
 
 Para o updater estatico em GitHub Releases, o `latest.json` precisa conter a versao, notas, data de publicacao, URL do instalador e assinatura do artefato. A assinatura deve ser o conteudo do arquivo `.sig`, nao um caminho.
 
+## Exemplo de notes para o cliente
+
+Use um texto em markdown simples, com blocos claros por categoria. O modal do cliente entende estes titulos:
+
+```json
+"notes": "## Melhorias\n- Item 1\n- Item 2\n\n## Correções\n- Item 3\n\n## Removido\n- Item 4"
+```
+
+Se quiser manter compatibilidade com o modal atual, siga este padrao:
+
+- `Melhorias` ou `Melhorado` para melhorias gerais
+- `Correções` ou `Corrigido` para bugs resolvidos
+- `Removido` para recursos retirados no modal; `Remoções` também é aceito, mas `Removido` evita ambiguidade
+
+Cada item abaixo do titulo aparece como um bullet na interface do cliente.
+
 ## Como o cliente recebe a atualizacao
 
 1. O usuario clica no icone de atualizar na sidebar.

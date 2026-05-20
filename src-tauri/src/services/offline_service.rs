@@ -33,6 +33,16 @@ pub struct OfflineStatusDto {
 }
 
 #[derive(Debug, Serialize)]
+pub struct AutoBackupSummaryDto {
+    pub last_backup_at: Option<String>,
+    pub last_file_name: Option<String>,
+    pub status: String,
+    pub error_message: Option<String>,
+    pub next_backup_at: Option<String>,
+    pub interval_hours: i64,
+}
+
+#[derive(Debug, Serialize)]
 pub struct BackupMaintenanceDto {
     pub backup_created: bool,
     pub backup: Option<BackupDto>,
@@ -94,6 +104,63 @@ impl<'a> OfflineService<'a> {
             Local::now().format("%Y-%m-%d_%H-%M-%S")
         );
         self.create_named_backup(file_name, "pre-update")
+    }
+
+    pub fn create_before_restore_backup(&self) -> AppResult<BackupDto> {
+        fs::create_dir_all(&self.backup_dir)?;
+        let store_name = sanitize_backup_name(&self.store_name()?);
+        let file_name = format!(
+            "before-restore_{}_{}_backup.db",
+            store_name,
+            Local::now().format("%Y-%m-%d_%H-%M")
+        );
+        self.create_named_backup(file_name, "before-restore")
+    }
+
+    pub fn auto_backup_summary(&self) -> AppResult<AutoBackupSummaryDto> {
+        fs::create_dir_all(&self.backup_dir)?;
+        let interval_hours = self.auto_backup_interval_hours()?;
+        let mut statement = self.connection.prepare(
+            "SELECT file_name, created_at, status, error_message
+             FROM backup_history
+             WHERE file_name LIKE 'auto_%'
+             ORDER BY created_at DESC
+             LIMIT 1",
+        )?;
+        let latest = statement
+            .query_row([], |row| {
+                Ok((
+                    row.get::<_, String>(0)?,
+                    row.get::<_, String>(1)?,
+                    row.get::<_, String>(2)?,
+                    row.get::<_, Option<String>>(3).unwrap_or(None),
+                ))
+            })
+            .optional()?;
+
+        if let Some((file_name, created_at, status, error_message)) = latest {
+            let next_backup_at = parse_sqlite_local_datetime(&created_at)
+                .map(|date| date + chrono::Duration::hours(interval_hours))
+                .map(|date| date.format("%Y-%m-%d %H:%M:%S").to_string());
+
+            return Ok(AutoBackupSummaryDto {
+                last_backup_at: Some(created_at),
+                last_file_name: Some(file_name),
+                status,
+                error_message,
+                next_backup_at,
+                interval_hours,
+            });
+        }
+
+        Ok(AutoBackupSummaryDto {
+            last_backup_at: None,
+            last_file_name: None,
+            status: "pending".to_string(),
+            error_message: None,
+            next_backup_at: None,
+            interval_hours,
+        })
     }
 
     pub fn ensure_auto_backup(&self) -> AppResult<BackupMaintenanceDto> {
@@ -186,7 +253,7 @@ impl<'a> OfflineService<'a> {
         fs::create_dir_all(&self.backup_dir)?;
         let mut backups = fs::read_dir(&self.backup_dir)?
             .filter_map(Result::ok)
-            .filter(|entry| matches!(entry.path().extension().and_then(|value| value.to_str()), Some("db") | Some("sqlite3")))
+            .filter(|entry| is_supported_backup_file(&entry.path()))
             .filter_map(|entry| self.backup_from_path(entry.path()).ok())
             .collect::<Vec<_>>();
 
@@ -195,19 +262,19 @@ impl<'a> OfflineService<'a> {
     }
 
     pub fn restore_backup(&self, backup_path: String) -> AppResult<BackupDto> {
-        let source = PathBuf::from(backup_path);
-
-        if !source.exists() || !matches!(source.extension().and_then(|value| value.to_str()), Some("db") | Some("sqlite3")) {
-            return Err(AppError::InvalidBackup);
-        }
+        let source = validate_backup_source(&PathBuf::from(backup_path))?;
         let integrity: String = Connection::open(&source)?.query_row("PRAGMA integrity_check", [], |row| row.get(0))?;
         if integrity != "ok" {
             return Err(AppError::InvalidBackup);
         }
 
+        let before_restore = self.create_before_restore_backup()?;
         self.connection.execute_batch("PRAGMA wal_checkpoint(TRUNCATE);")?;
 
-        fs::copy(&source, &self.database_path)?;
+        if let Err(error) = fs::copy(&source, &self.database_path) {
+            let _ = fs::copy(&before_restore.path, &self.database_path);
+            return Err(AppError::Io(error));
+        }
         self.connection.execute(
             "INSERT INTO backup_history (id, file_name, path, size_bytes, status, created_at)
              VALUES (?1, ?2, ?3, ?4, 'restored', CURRENT_TIMESTAMP)",
@@ -240,7 +307,7 @@ impl<'a> OfflineService<'a> {
         fs::create_dir_all(&self.backup_dir)?;
         for entry in fs::read_dir(&self.backup_dir)?.filter_map(Result::ok) {
             let path = entry.path();
-            if matches!(path.extension().and_then(|value| value.to_str()), Some("db") | Some("sqlite3")) {
+            if is_supported_backup_file(&path) {
                 fs::remove_file(path)?;
             }
         }
@@ -273,7 +340,19 @@ impl<'a> OfflineService<'a> {
         let created_at = timestamp();
         let backup_path = self.backup_dir.join(&file_name);
 
-        self.connection.execute("VACUUM main INTO ?1", [backup_path.to_string_lossy().as_ref()])?;
+        if let Err(error) = self.connection.execute("VACUUM main INTO ?1", [backup_path.to_string_lossy().as_ref()]) {
+            let _ = self.connection.execute(
+                "INSERT INTO backup_history (id, file_name, path, size_bytes, status, created_at, error_message)
+                 VALUES (?1, ?2, ?3, 0, 'failed', CURRENT_TIMESTAMP, ?4)",
+                (
+                    format!("{id_prefix}-{created_at}"),
+                    file_name,
+                    backup_path.to_string_lossy().to_string(),
+                    error.to_string(),
+                ),
+            );
+            return Err(error.into());
+        }
         self.connection.execute(
             "INSERT INTO backup_history (id, file_name, path, size_bytes, status, created_at)
              VALUES (?1, ?2, ?3, ?4, 'created', CURRENT_TIMESTAMP)",
@@ -321,7 +400,7 @@ impl<'a> OfflineService<'a> {
 
     fn resolve_backup_path(&self, backup_path: &str) -> AppResult<PathBuf> {
         let target = PathBuf::from(backup_path);
-        if !matches!(target.extension().and_then(|value| value.to_str()), Some("db")) {
+        if !is_supported_backup_file(&target) {
             return Err(AppError::InvalidBackup);
         }
         let canonical_target = target.canonicalize().map_err(|_| AppError::InvalidBackup)?;
@@ -357,9 +436,33 @@ fn backup_type_from_file_name(file_name: &str) -> &'static str {
         "automatic"
     } else if file_name.starts_with("pre-update_") {
         "pre-update"
+    } else if file_name.starts_with("before-restore_") {
+        "before-restore"
     } else {
         "manual-legacy"
     }
+}
+
+fn validate_backup_source(source: &PathBuf) -> AppResult<PathBuf> {
+    if !source.exists() || !source.is_file() || !is_supported_backup_file(source) {
+        return Err(AppError::InvalidBackup);
+    }
+
+    source.canonicalize().map_err(|_| AppError::InvalidBackup)
+}
+
+fn is_supported_backup_file(path: &PathBuf) -> bool {
+    matches!(
+        path.extension()
+            .and_then(|value| value.to_str())
+            .map(|value| value.to_ascii_lowercase())
+            .as_deref(),
+        Some("db") | Some("sqlite") | Some("sqlite3")
+    )
+}
+
+fn parse_sqlite_local_datetime(value: &str) -> Option<chrono::NaiveDateTime> {
+    chrono::NaiveDateTime::parse_from_str(value, "%Y-%m-%d %H:%M:%S").ok()
 }
 
 fn sanitize_backup_name(value: &str) -> String {

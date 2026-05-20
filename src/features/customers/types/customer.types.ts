@@ -3,6 +3,7 @@ export type Customer = {
   name: string;
   phone: string;
   whatsapp: string;
+  motorcycleModel: string;
   documentNumber: string;
   email: string;
   address: string;

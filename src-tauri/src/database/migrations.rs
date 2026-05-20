@@ -78,6 +78,16 @@ const MIGRATIONS: &[Migration] = &[
         name: "auto_backup_settings",
         sql: include_str!("../../migrations/0014_auto_backup_settings.sql"),
     },
+    Migration {
+        version: 15,
+        name: "backup_history_error_message",
+        sql: include_str!("../../migrations/0015_backup_history_error_message.sql"),
+    },
+    Migration {
+        version: 16,
+        name: "customer_motorcycle_model",
+        sql: include_str!("../../migrations/0016_customer_motorcycle_model.sql"),
+    },
 ];
 
 pub fn run_migrations(connection: &Connection) -> AppResult<()> {
@@ -105,6 +115,22 @@ pub fn run_migrations(connection: &Connection) -> AppResult<()> {
         let transaction = connection.unchecked_transaction()?;
         if migration.version == 11 {
             ensure_sales_discount_columns(&transaction)?;
+        }
+        if migration.version == 15 && column_exists(&transaction, "backup_history", "error_message")? {
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, name) VALUES (?1, ?2)",
+                params![migration.version, migration.name],
+            )?;
+            transaction.commit()?;
+            continue;
+        }
+        if migration.version == 16 && column_exists(&transaction, "customers", "motorcycle_model")? {
+            transaction.execute(
+                "INSERT INTO schema_migrations (version, name) VALUES (?1, ?2)",
+                params![migration.version, migration.name],
+            )?;
+            transaction.commit()?;
+            continue;
         }
         transaction.execute_batch(migration.sql)?;
         transaction.execute(

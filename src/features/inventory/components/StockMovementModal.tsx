@@ -4,6 +4,7 @@ import { Input } from '@shared/components/ui/input';
 import { useRegisterStockMovement } from '../queries/inventory.queries';
 import type { Product, StockMovementFormValues } from '../types/inventory.types';
 import { formatBRLInput, parseBRLInputToCents, sanitizeIntegerInput } from '@/utils/numberFormat';
+import { DialogBody, DialogShell, StickyDialogFooter } from '@shared/components/layout';
 
 type StockMovementModalProps = {
   products: Product[];
@@ -50,8 +51,8 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
   }
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <form className="w-[620px] rounded-lg border border-border bg-card p-5 shadow-lg" onSubmit={handleSubmit}>
+    <DialogShell title="Movimentar estoque" description="Entrada, saida, ajuste, perda ou saldo inicial." onClose={onClose} className="max-w-[620px]">
+      <form className="flex min-h-0 flex-1 flex-col overflow-hidden" onSubmit={handleSubmit}>
         <div className="flex items-start justify-between gap-4">
           <div>
             <h2 className="text-base font-semibold">Movimentar estoque</h2>
@@ -60,7 +61,8 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
           <Button type="button" variant="ghost" onClick={onClose}>Fechar</Button>
         </div>
 
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
+        <DialogBody>
+        <div className="mt-5 grid gap-4 md:grid-cols-2 compact:gap-3">
           <label className="grid gap-2 text-sm md:col-span-2">
             <span className="font-medium">Produto</span>
             <select
@@ -156,11 +158,12 @@ export function StockMovementModal({ products, selectedProduct, onClose }: Stock
           </label>
         </div>
 
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit" disabled={registerMovement.isPending}>Registrar movimento</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }

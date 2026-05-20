@@ -1,4 +1,4 @@
-import { Pencil, PackagePlus, RefreshCw, Trash2 } from 'lucide-react';
+import { Pencil, RefreshCw, Trash2 } from 'lucide-react';
 import { useState } from 'react';
 import { Badge } from '@shared/components/ui/badge';
 import { Button } from '@shared/components/ui/button';
@@ -28,6 +28,7 @@ import { useInventoryStore } from '../stores/inventory.store';
 import type { Category, CategoryFormValues, Supplier, SupplierFormValues } from '../types/inventory.types';
 import { formatBrazilianPhone, sanitizePhone } from '@features/customers/utils/customer-phone';
 import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
+import { DialogBody, DialogShell, PageContainer, StickyDialogFooter } from '@shared/components/layout';
 
 type AuxiliaryModal =
   | { type: 'category'; item?: Category }
@@ -51,11 +52,12 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
   const deactivateCategory = useDeactivateCategory();
   const deactivateSupplier = useDeactivateSupplier();
   const inventory = inventoryQuery.data;
+  const isMovementsTab = activeTab.includes('Movimenta');
 
   if (inventoryQuery.isError) {
     console.error(inventoryQuery.error);
     return (
-      <div className="p-6">
+      <PageContainer>
         <Card>
           <CardContent className="space-y-4 p-6">
             <div>
@@ -65,44 +67,38 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
             <Button onClick={() => void inventoryQuery.refetch()}>Tentar novamente</Button>
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   if (!inventory) {
     return (
-      <div className="p-6">
+      <PageContainer>
         <Card>
           <CardContent className="flex h-52 items-center justify-center gap-3 p-6 text-muted-foreground">
             <RefreshCw className="h-4 w-4 animate-spin" />
             Carregando estoque local
           </CardContent>
         </Card>
-      </div>
+      </PageContainer>
     );
   }
 
   return (
-    <div className="space-y-5 px-6 pb-6 pt-4">
-      <div className="flex flex-wrap items-center justify-between gap-3">
+    <PageContainer className="gap-3">
+      <div className="flex flex-none flex-wrap items-center justify-between gap-2">
         <div className="flex flex-wrap gap-2">
           {['Produtos', 'Categorias', 'Fornecedores', 'Movimentações'].map((tab) => (
-            <Button key={tab} variant={activeTab === tab ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(tab)}>
+            <Button key={tab} className="h-8 px-3" variant={activeTab === tab ? 'default' : 'outline'} size="sm" onClick={() => setActiveTab(tab)}>
               {tab}
             </Button>
           ))}
         </div>
-        <div className="flex gap-2">
-          {!cashOpen && <Badge variant="warning">Movimentações bloqueadas: caixa fechado</Badge>}
-          <Button onClick={() => openModal('movement')} disabled={!cashOpen} size="sm">
-            <PackagePlus className="h-4 w-4" />
-            Movimentar estoque
-          </Button>
-        </div>
+        {!cashOpen && <Badge variant="warning">Movimentações bloqueadas: caixa fechado</Badge>}
       </div>
 
       {activeTab === 'Produtos' && (
-        <>
+        <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
           <InventoryToolbar
             filters={filters}
             categories={inventory.categories}
@@ -114,7 +110,9 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
             onImport={() => openModal('import')}
           />
           <InventorySummaryCards summary={inventory.summary} />
-          <InventoryAlerts alerts={inventory.alerts} onApplyFilter={(filter) => setFilter('stockStatus', filter)} />
+          <div className="hidden xl:block">
+            <InventoryAlerts alerts={inventory.alerts} onApplyFilter={(filter) => setFilter('stockStatus', filter)} />
+          </div>
           <ProductVirtualTable products={inventory.products} selectedProductId={selectedProduct?.id} onSelectProduct={selectProduct} />
           {inventory.products.length === 0 && (
             <Card>
@@ -123,8 +121,10 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
               </CardContent>
             </Card>
           )}
-          <InventoryInsights products={inventory.products} />
-        </>
+          <div className="hidden 2xl:block">
+            <InventoryInsights products={inventory.products} />
+          </div>
+        </div>
       )}
 
       {activeTab === 'Categorias' && (
@@ -159,11 +159,11 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
         />
       )}
 
-      {activeTab === 'Movimentacoes' && (
-        <Card>
-          <CardContent className="space-y-3 p-5">
+      {isMovementsTab && (
+        <Card className="min-h-0 flex-1 overflow-hidden">
+          <CardContent className="flex h-full min-h-0 flex-col space-y-3 p-5 compact:p-3">
             <h3 className="font-semibold">Movimentacoes</h3>
-            <div className="rounded-md border border-border">
+            <div className="min-h-0 flex-1 overflow-auto rounded-md border border-border">
               {(movementsQuery.data ?? []).map((movement) => (
                 <div key={movement.id} className="grid grid-cols-5 gap-3 border-b border-border p-3 text-sm">
                   <span>{movement.movementType}</span>
@@ -204,7 +204,7 @@ export function InventoryPage({ cashOpen = true }: { cashOpen?: boolean }) {
       {activeModal === 'import' && <ImportProductsModal onClose={closeModal} />}
       {auxiliaryModal?.type === 'category' && <CategoryModal category={auxiliaryModal.item} onClose={() => setAuxiliaryModal(null)} />}
       {auxiliaryModal?.type === 'supplier' && <SupplierModal supplier={auxiliaryModal.item} onClose={() => setAuxiliaryModal(null)} />}
-    </div>
+    </PageContainer>
   );
 }
 
@@ -327,24 +327,20 @@ function SupplierModal({ supplier, onClose }: { supplier?: Supplier; onClose: ()
 
 function ModalFrame({ title, onClose, children }: { title: string; onClose: () => void; children: React.ReactNode }) {
   return (
-    <div className="fixed inset-0 z-50 grid place-items-center bg-background/80 backdrop-blur-sm">
-      <div className="w-[620px] space-y-4 rounded-lg border border-border bg-card p-6 shadow-lg">
-        <div className="flex items-center justify-between">
-          <h3 className="text-base font-semibold">{title}</h3>
-          <Button variant="ghost" onClick={onClose}>Fechar</Button>
-        </div>
+    <DialogShell title={title} onClose={onClose} className="max-w-[620px]" zIndexClassName="z-50">
+      <DialogBody className="space-y-4">
         {children}
-      </div>
-    </div>
+      </DialogBody>
+    </DialogShell>
   );
 }
 
 function ModalActions({ onClose, onSave }: { onClose: () => void; onSave: () => void }) {
   return (
-    <div className="flex justify-end gap-2">
+    <StickyDialogFooter className="-mx-5 -mb-4 mt-4">
       <Button variant="outline" onClick={onClose}>Cancelar</Button>
       <Button onClick={onSave}>Salvar</Button>
-    </div>
+    </StickyDialogFooter>
   );
 }
 

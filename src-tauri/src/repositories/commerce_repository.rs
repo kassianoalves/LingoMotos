@@ -30,6 +30,7 @@ pub struct CustomerDto {
     pub name: String,
     pub phone: String,
     pub whatsapp: String,
+    pub motorcycle_model: String,
     pub document_number: String,
     pub email: String,
     pub address: String,
@@ -46,6 +47,7 @@ pub struct CustomerInput {
     pub name: String,
     pub phone: String,
     pub whatsapp: String,
+    pub motorcycle_model: String,
     pub document_number: String,
     pub email: String,
     pub address: String,
@@ -513,7 +515,7 @@ impl<'a> CommerceRepository<'a> {
 
     pub fn list_customers(&self) -> AppResult<Vec<CustomerDto>> {
         let mut stmt = self.connection.prepare(
-            "SELECT id, name, COALESCE(phone,''), COALESCE(mobile_phone,''), COALESCE(document_number,''),
+            "SELECT id, name, COALESCE(phone,''), COALESCE(mobile_phone,''), COALESCE(motorcycle_model,''), COALESCE(document_number,''),
                     COALESCE(email,''), COALESCE(address_line,''), COALESCE(notes,''), is_active, created_at, updated_at
              FROM customers WHERE deleted_at IS NULL ORDER BY name",
         )?;
@@ -523,7 +525,7 @@ impl<'a> CommerceRepository<'a> {
 
     pub fn get_customer(&self, id: &str) -> AppResult<Option<CustomerDto>> {
         Ok(self.connection.query_row(
-            "SELECT id, name, COALESCE(phone,''), COALESCE(mobile_phone,''), COALESCE(document_number,''),
+            "SELECT id, name, COALESCE(phone,''), COALESCE(mobile_phone,''), COALESCE(motorcycle_model,''), COALESCE(document_number,''),
                     COALESCE(email,''), COALESCE(address_line,''), COALESCE(notes,''), is_active, created_at, updated_at
              FROM customers WHERE id = ?1 AND deleted_at IS NULL",
             [id],
@@ -534,12 +536,12 @@ impl<'a> CommerceRepository<'a> {
     pub fn save_customer(&self, input: &CustomerInput) -> AppResult<CustomerDto> {
         let id = input.id.clone().filter(|value| !value.is_empty()).unwrap_or_else(new_id);
         self.connection.execute(
-            "INSERT INTO customers (id, name, phone, mobile_phone, document_number, email, address_line, notes)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)
+            "INSERT INTO customers (id, name, phone, mobile_phone, motorcycle_model, document_number, email, address_line, notes)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
              ON CONFLICT(id) DO UPDATE SET name = excluded.name, phone = excluded.phone, mobile_phone = excluded.mobile_phone,
-               document_number = excluded.document_number, email = excluded.email, address_line = excluded.address_line,
+               motorcycle_model = excluded.motorcycle_model, document_number = excluded.document_number, email = excluded.email, address_line = excluded.address_line,
                notes = excluded.notes, is_active = 1, deleted_at = NULL",
-            params![id, input.name, input.phone, input.whatsapp, input.document_number, input.email, input.address, input.notes],
+            params![id, input.name, input.phone, input.whatsapp, input.motorcycle_model, input.document_number, input.email, input.address, input.notes],
         )?;
         self.get_customer(&id)?.ok_or_else(|| AppError::Validation("Cliente nao encontrado apos salvar.".into()))
     }
@@ -813,7 +815,7 @@ impl<'a> CommerceRepository<'a> {
     }
 
     pub fn import_products(&mut self, request: &ProductImportRequestDto) -> AppResult<ProductImportReportDto> {
-        if !matches!(request.options.duplicate_strategy.as_str(), "skip" | "update_prices" | "update_all") {
+        if !matches!(request.options.duplicate_strategy.as_str(), "skip" | "update_existing" | "create_new" | "update_prices" | "update_all") {
             return Err(AppError::Validation("Estrategia de duplicidade invalida.".into()));
         }
 
@@ -861,7 +863,11 @@ impl<'a> CommerceRepository<'a> {
                 continue;
             }
 
-            let existing_id = find_existing_product_id(&tx, &draft.values)?;
+            let existing_id = if request.options.duplicate_strategy == "create_new" {
+                None
+            } else {
+                find_existing_product_id(&tx, &draft.values)?
+            };
             if existing_id.is_some() && request.options.duplicate_strategy == "skip" {
                 skipped += 1;
                 insert_import_row(&tx, &batch_id, draft, "skip", existing_id.as_deref())?;
@@ -1141,13 +1147,39 @@ impl<'a> CommerceRepository<'a> {
         self.get_current_cash_session()?.ok_or_else(|| AppError::Validation("Nao foi possivel abrir o caixa.".into()))
     }
 
-    pub fn close_cash_session(&self, reported_amount_cents: i64) -> AppResult<()> {
-        let open = self.get_current_cash_session()?.ok_or_else(|| AppError::Validation("Nao existe caixa aberto.".into()))?;
-        self.connection.execute(
-            "UPDATE cash_sessions SET closed_at = CURRENT_TIMESTAMP, reported_amount_cents = ?2,
-             difference_cents = ?2 - expected_amount_cents, status = 'closed' WHERE id = ?1",
+    pub fn close_cash_session(&mut self, reported_amount_cents: i64) -> AppResult<()> {
+        let tx = self.connection.transaction()?;
+        let open = tx.query_row(
+            "SELECT id, opened_at, closed_at, opening_amount_cents, expected_amount_cents, reported_amount_cents, status
+             FROM cash_sessions WHERE status = 'open' ORDER BY opened_at DESC LIMIT 1",
+            [],
+            map_cash_session,
+        ).optional()?.ok_or_else(|| AppError::Validation("Nao existe caixa aberto.".into()))?;
+        let updated = tx.execute(
+            "UPDATE cash_sessions
+             SET closed_at = CURRENT_TIMESTAMP,
+                 reported_amount_cents = ?2,
+                 difference_cents = ?2 - expected_amount_cents,
+                 status = 'closed',
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = ?1 AND status = 'open'",
             params![open.id, reported_amount_cents],
         )?;
+        if updated == 0 {
+            return Err(AppError::Validation("Nao foi possivel fechar o caixa.".into()));
+        }
+        #[cfg(debug_assertions)]
+        {
+            let difference_cents = reported_amount_cents - open.expected_amount_cents;
+            eprintln!(
+                "close_cash_session: id={} reported={} expected={} difference={}",
+                open.id,
+                reported_amount_cents,
+                open.expected_amount_cents,
+                difference_cents,
+            );
+        }
+        tx.commit()?;
         Ok(())
     }
 
@@ -1974,9 +2006,6 @@ fn collect_import_errors(request: &ProductImportRequestDto) -> Vec<ProductImport
         if draft.values.name.trim().is_empty() {
             errors.push(ProductImportErrorDto { row_number: draft.row_number, message: "Nome obrigatorio.".into() });
         }
-        if draft.values.sku.trim().is_empty() {
-            errors.push(ProductImportErrorDto { row_number: draft.row_number, message: "SKU obrigatorio.".into() });
-        }
         for message in &draft.errors {
             errors.push(ProductImportErrorDto { row_number: draft.row_number, message: message.clone() });
         }
@@ -1985,7 +2014,7 @@ fn collect_import_errors(request: &ProductImportRequestDto) -> Vec<ProductImport
 }
 
 fn draft_has_import_error(draft: &ProductImportDraftDto) -> bool {
-    !draft.errors.is_empty() || draft.values.name.trim().is_empty() || draft.values.sku.trim().is_empty()
+    !draft.errors.is_empty() || draft.values.name.trim().is_empty()
 }
 
 fn source_type_from_file_name(file_name: &str) -> &'static str {
@@ -2002,12 +2031,13 @@ fn find_existing_product_id(connection: &Connection, values: &ProductImportValue
          FROM products
          WHERE deleted_at IS NULL
            AND (
-             lower(trim(sku)) = lower(trim(?1))
+             (?1 <> '' AND lower(trim(sku)) = lower(trim(?1)))
              OR (?2 <> '' AND lower(trim(COALESCE(barcode,''))) = lower(trim(?2)))
-             OR lower(trim(name)) = lower(trim(?3))
+             OR (?3 <> '' AND ?4 <> '' AND lower(trim(name)) = lower(trim(?3)) AND lower(trim(COALESCE(brand,''))) = lower(trim(?4)))
+             OR (?3 <> '' AND ?5 <> '' AND lower(trim(name)) = lower(trim(?3)) AND lower(trim(COALESCE(motorcycle_application,''))) = lower(trim(?5)))
            )
          LIMIT 1",
-        params![values.sku, values.barcode, values.name],
+        params![values.sku, values.barcode, values.name, values.brand, values.motorcycle_application],
         |row| row.get(0),
     ).optional()?)
 }
@@ -2165,13 +2195,14 @@ fn map_customer(row: &rusqlite::Row<'_>) -> rusqlite::Result<CustomerDto> {
         name: row.get(1)?,
         phone: row.get(2)?,
         whatsapp: row.get(3)?,
-        document_number: row.get(4)?,
-        email: row.get(5)?,
-        address: row.get(6)?,
-        notes: row.get(7)?,
-        active: row.get::<_, i64>(8)? == 1,
-        created_at: row.get(9)?,
-        updated_at: row.get(10)?,
+        motorcycle_model: row.get(4)?,
+        document_number: row.get(5)?,
+        email: row.get(6)?,
+        address: row.get(7)?,
+        notes: row.get(8)?,
+        active: row.get::<_, i64>(9)? == 1,
+        created_at: row.get(10)?,
+        updated_at: row.get(11)?,
     })
 }
 

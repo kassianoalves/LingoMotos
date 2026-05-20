@@ -1,6 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Edit, History, Search, ShoppingCart, Trash2 } from 'lucide-react';
-import { Badge } from '@shared/components/ui/badge';
+import { Edit, History, MoreVertical, Search, ShoppingCart, Trash2 } from 'lucide-react';
 import { Button } from '@shared/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle } from '@shared/components/ui/card';
 import { Input } from '@shared/components/ui/input';
@@ -12,8 +11,7 @@ import { formatCpfCnpj, onlyDigits } from '@/utils/formatters';
 import { usePosCustomerStore } from '@features/pos/stores/pos-customer.store';
 import { financeRepository } from '@features/finance/repositories/finance.repository';
 import { formatCurrency } from '@/utils/formatters';
-import { QrCodeModal } from '@shared/components/QrCodeModal';
-import { buildWhatsappUrl } from '@/utils/whatsapp';
+import { DialogBody, DialogShell, PageContainer, ScrollArea, StickyDialogFooter } from '@shared/components/layout';
 
 type ToastState = {
   message: string;
@@ -33,7 +31,7 @@ export function CustomersPage({ navigate, cashOpen }: { navigate: (route: string
   const [editing, setEditing] = useState<Customer | null>(null);
   const [toast, setToast] = useState<ToastState | null>(null);
   const [customerSales, setCustomerSales] = useState<Array<{ id: string; saleNumber: string; totalCents: number }>>([]);
-  const [whatsappQr, setWhatsappQr] = useState<{ title: string; value: string } | null>(null);
+  const [actionsMenuCustomerId, setActionsMenuCustomerId] = useState<string | null>(null);
 
   useEffect(() => {
     void loadCustomers();
@@ -81,174 +79,152 @@ export function CustomersPage({ navigate, cashOpen }: { navigate: (route: string
   }, [customers, search]);
 
   return (
-    <div className="grid gap-6 px-6 pb-6 pt-4 xl:grid-cols-[minmax(0,1fr)_minmax(380px,420px)]">
-      <div className="space-y-4">
-        <div className="relative">
-          <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            className="pl-9"
-            value={search}
-            onChange={(event) => setSearch(event.target.value)}
-            placeholder="Buscar nome, telefone, WhatsApp ou CPF/CNPJ"
-          />
+    <PageContainer className="gap-3">
+      <div className="grid min-h-0 flex-1 grid-cols-[minmax(280px,0.9fr)_minmax(0,1.1fr)] gap-3">
+        <div className="flex min-h-0 flex-col gap-3">
+          <div className="flex flex-none items-center gap-2">
+            <div className="relative min-w-0 flex-1">
+              <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                className="h-9 pl-9 compact:h-8"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Buscar nome, telefone, WhatsApp ou CPF/CNPJ"
+              />
+            </div>
+            <Button
+              type="button"
+              size="sm"
+              className="h-9 flex-none compact:h-8"
+              disabled={!cashOpen}
+              onClick={() => setEditing(emptyCustomer())}
+            >
+              Novo
+            </Button>
+          </div>
+
+          <Card className="min-h-0 flex-1 overflow-hidden">
+            <CardContent className="h-full min-h-0 overflow-y-auto p-0">
+              {filteredCustomers.map((customer) => (
+                <div key={customer.id} className="relative border-b border-border p-3 hover:bg-muted/50 compact:p-2">
+                  <button type="button" className="min-w-0 pr-9 text-left" onClick={() => selectCustomer(customer)}>
+                    <p className="truncate font-medium">{customer.name}</p>
+                    <p className="mt-1 truncate text-xs text-muted-foreground">Moto: {customer.motorcycleModel || 'Moto não informada'}</p>
+                  </button>
+
+                  <div className="absolute right-2 top-2">
+                    <Button
+                      type="button"
+                      size="icon"
+                      variant="ghost"
+                      className="h-7 w-7"
+                      aria-label="Abrir ações do cliente"
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        setActionsMenuCustomerId((current) => (current === customer.id ? null : customer.id));
+                      }}
+                    >
+                      <MoreVertical className="h-4 w-4" />
+                    </Button>
+                    {actionsMenuCustomerId === customer.id && (
+                      <CustomerActionsMenu
+                        customer={customer}
+                        cashOpen={cashOpen}
+                        onClose={() => setActionsMenuCustomerId(null)}
+                        onEdit={() => setEditing(customer)}
+                        onSelect={() => selectCustomer(customer)}
+                        onNewSale={() => {
+                          selectCustomer(customer);
+                          selectPosCustomer(customer);
+                          navigate('/vendas');
+                        }}
+                        onDelete={async () => {
+                          if (!cashOpen) {
+                            showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
+                            return;
+                          }
+                          if (!window.confirm(`Excluir cliente ${customer.name}? O histórico de vendas será preservado.`)) return;
+                          try {
+                            await deleteCustomer(customer.id);
+                            showToast({ tone: 'success', message: 'Cliente excluído com sucesso.' });
+                          } catch {
+                            showToast({ tone: 'error', message: 'Erro ao excluir cliente.' });
+                          }
+                        }}
+                        whatsappActions={whatsappActions}
+                      />
+                    )}
+                  </div>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
         </div>
 
-        <Card>
-          <CardContent className="p-0">
-            {filteredCustomers.map((customer) => (
-              <div key={customer.id} className="grid gap-3 border-b border-border p-4 hover:bg-muted/50">
-                <button type="button" className="min-w-0 text-left" onClick={() => selectCustomer(customer)}>
-                  <p className="truncate font-medium">{customer.name}</p>
-                  <p className="mt-1 truncate text-sm text-muted-foreground">
-                    {formatBrazilianPhone(customer.phone) || 'Sem telefone'}
-                  </p>
-                  <p className="mt-1 text-xs text-muted-foreground">Última atualização: {customer.updatedAt}</p>
-                </button>
-
-                <div className="flex flex-wrap items-center gap-2">
+        <Card className="flex min-h-0 flex-col overflow-hidden">
+          <CardHeader className="flex-none p-3 pb-2 compact:p-2">
+            <CardTitle className="text-sm">Detalhes do cliente</CardTitle>
+          </CardHeader>
+          <CardContent className="flex min-h-0 flex-1 flex-col overflow-hidden p-3 pt-0 compact:p-2">
+            {selectedCustomer ? (
+              <>
+                <div className="flex-none">
+                  <p className="truncate text-base font-semibold">{selectedCustomer.name}</p>
+                </div>
+                <div className="mt-3 grid flex-none gap-2 md:grid-cols-2 compact:mt-2">
+                  <Info label="CPF/CNPJ" value={formatCpfCnpj(selectedCustomer.documentNumber) || 'Não informado'} />
+                  <Info label="Telefone" value={formatBrazilianPhone(selectedCustomer.phone) || 'Não informado'} />
+                  <Info label="WhatsApp" value={formatBrazilianPhone(selectedCustomer.whatsapp) || 'Não informado'} />
+                  <Info label="Modelo da moto" value={selectedCustomer.motorcycleModel || 'Moto não informada'} />
+                  <Info label="E-mail" value={selectedCustomer.email || 'Não informado'} />
+                  <Info label="Endereço" value={selectedCustomer.address || 'Não informado'} />
+                  <Info label="Observações" value={selectedCustomer.notes || 'Sem observações'} />
+                </div>
+                <ScrollArea className="mt-3 min-h-0 flex-1 rounded-md border border-border p-3 text-sm text-muted-foreground compact:mt-2 compact:p-2">
+                  <p className="font-medium text-foreground">Histórico</p>
+                  <div className="mt-2 space-y-2">
+                    {customerSales.map((sale) => (
+                      <div key={sale.id} className="flex items-center justify-between gap-3">
+                        <span>Venda {sale.saleNumber}</span>
+                        <span>{formatCurrency(sale.totalCents)}</span>
+                      </div>
+                    ))}
+                    {customerSales.length === 0 && <p>Sem compras registradas.</p>}
+                  </div>
+                </ScrollArea>
+                <div className="mt-3 flex flex-none flex-wrap items-center justify-between gap-2 border-t border-border pt-3 compact:mt-2 compact:pt-2">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Button className="h-9 min-w-fit px-3" onClick={() => setEditing(selectedCustomer)}>Editar</Button>
+                    <CustomerWhatsappButton customer={selectedCustomer} label="Abrir WhatsApp" size="default" className="h-9 min-w-fit px-3" {...whatsappActions} />
+                  </div>
                   <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    title="Editar cliente"
-                    onClick={() => setEditing(customer)}
-                  >
-                    <Edit className="h-4 w-4" />
-                    Editar
-                  </Button>
-                  <CustomerWhatsappButton customer={customer} {...whatsappActions} />
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    title="QR WhatsApp"
-                    onClick={() => {
-                      const url = buildWhatsappUrl(customer.whatsapp || customer.phone, `Olá, ${customer.name}. Aqui é da LingoMotos.`);
-                      if (!url) {
-                        showToast({ tone: 'error', message: 'Telefone invalido.' });
-                        return;
-                      }
-                      setWhatsappQr({ title: `QR WhatsApp - ${customer.name}`, value: url });
-                    }}
-                  >
-                    QR WhatsApp
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    title="Nova venda"
-                    onClick={() => {
-                      selectCustomer(customer);
-                      selectPosCustomer(customer);
-                      navigate('/vendas');
-                    }}
-                  >
-                    <ShoppingCart className="h-4 w-4" />
-                    Nova venda
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
-                    variant="outline"
-                    title="Histórico"
-                    onClick={() => selectCustomer(customer)}
-                  >
-                    <History className="h-4 w-4" />
-                    Histórico
-                  </Button>
-                  <Button
-                    type="button"
-                    size="sm"
                     variant="destructive"
-                    title="Excluir cliente"
+                    className="h-9 min-w-fit px-3"
                     disabled={!cashOpen}
                     onClick={async () => {
                       if (!cashOpen) {
                         showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
                         return;
                       }
-                      if (!window.confirm(`Excluir cliente ${customer.name}? O historico de vendas sera preservado.`)) return;
+                      if (!window.confirm(`Excluir cliente ${selectedCustomer.name}? O histórico de vendas será preservado.`)) return;
                       try {
-                        await deleteCustomer(customer.id);
-                        showToast({ tone: 'success', message: 'Cliente excluido com sucesso.' });
+                        await deleteCustomer(selectedCustomer.id);
+                        showToast({ tone: 'success', message: 'Cliente excluído com sucesso.' });
                       } catch {
                         showToast({ tone: 'error', message: 'Erro ao excluir cliente.' });
                       }
                     }}
                   >
-                    <Trash2 className="h-4 w-4" />
                     Excluir
                   </Button>
                 </div>
-              </div>
-            ))}
+              </>
+            ) : (
+              <p className="text-sm text-muted-foreground">Selecione um cliente.</p>
+            )}
           </CardContent>
         </Card>
       </div>
-
-      <Card className="h-fit overflow-hidden">
-        <CardHeader>
-          <CardTitle>Detalhes do cliente</CardTitle>
-        </CardHeader>
-        <CardContent className="space-y-4">
-          {selectedCustomer ? (
-            <>
-              <div>
-                <p className="text-lg font-semibold">{selectedCustomer.name}</p>
-              </div>
-              <Info label="CPF/CNPJ" value={formatCpfCnpj(selectedCustomer.documentNumber) || 'Não informado'} />
-              <Info label="Telefone" value={formatBrazilianPhone(selectedCustomer.phone) || 'Não informado'} />
-              <Info label="WhatsApp" value={formatBrazilianPhone(selectedCustomer.whatsapp) || 'Não informado'} />
-              <Info label="E-mail" value={selectedCustomer.email || 'Não informado'} />
-              <Info label="Endereço" value={selectedCustomer.address || 'Não informado'} />
-              <Info label="Observações" value={selectedCustomer.notes || 'Sem observações'} />
-              <div className="rounded-md border border-border p-3 text-sm text-muted-foreground">
-                <p className="font-medium text-foreground">Histórico</p>
-                <div className="mt-2 space-y-2">
-                  {customerSales.map((sale) => (
-                    <div key={sale.id} className="flex items-center justify-between gap-3">
-                      <span>Venda {sale.saleNumber}</span>
-                      <span>{formatCurrency(sale.totalCents)}</span>
-                    </div>
-                  ))}
-                  {customerSales.length === 0 && (
-                    <p>Sem compras registradas.</p>
-                  )}
-                </div>
-              </div>
-              <div className="flex flex-wrap items-center justify-between gap-2">
-                <div className="flex flex-wrap items-center gap-2">
-                  <Button className="min-w-fit" onClick={() => setEditing(selectedCustomer)}>Editar</Button>
-                  <CustomerWhatsappButton customer={selectedCustomer} label="Abrir WhatsApp" size="default" className="min-w-fit" {...whatsappActions} />
-                </div>
-                <Button
-                  variant="destructive"
-                  className="min-w-fit"
-                  disabled={!cashOpen}
-                  onClick={async () => {
-                    if (!cashOpen) {
-                      showToast({ tone: 'error', message: 'Abra o caixa para cadastrar clientes.' });
-                      return;
-                    }
-                    if (!window.confirm(`Excluir cliente ${selectedCustomer.name}? O historico de vendas sera preservado.`)) return;
-                    try {
-                      await deleteCustomer(selectedCustomer.id);
-                      showToast({ tone: 'success', message: 'Cliente excluido com sucesso.' });
-                    } catch {
-                      showToast({ tone: 'error', message: 'Erro ao excluir cliente.' });
-                    }
-                  }}
-                >
-                  Excluir
-                </Button>
-              </div>
-            </>
-          ) : (
-            <p className="text-sm text-muted-foreground">Selecione um cliente.</p>
-          )}
-        </CardContent>
-      </Card>
 
       {editing && (
         <CustomerModal
@@ -266,30 +242,76 @@ export function CustomersPage({ navigate, cashOpen }: { navigate: (route: string
       )}
 
       {toast && <Toast message={toast.message} tone={toast.tone} />}
-      {whatsappQr && (
-        <QrCodeModal
-          title={whatsappQr.title}
-          description="Escaneie para abrir a conversa no WhatsApp."
-          value={whatsappQr.value}
-          fileName="whatsapp-cliente.svg"
-          onClose={() => setWhatsappQr(null)}
-        />
-      )}
-    </div>
+    </PageContainer>
   );
 }
 
 function Info({ label, value }: { label: string; value: string }) {
   return (
-    <div>
+    <div className="min-w-0 rounded-md border border-border/60 p-2">
       <p className="text-xs text-muted-foreground">{label}</p>
-      <p className="text-sm font-medium">{value}</p>
+      <p className="truncate text-sm font-medium" title={value}>{value}</p>
+    </div>
+  );
+}
+
+function CustomerActionsMenu({
+  customer,
+  cashOpen,
+  whatsappActions,
+  onClose,
+  onEdit,
+  onSelect,
+  onNewSale,
+  onDelete,
+}: {
+  customer: Customer;
+  cashOpen: boolean;
+  whatsappActions: { onInvalidPhone: () => void; onOpening: () => void };
+  onClose: () => void;
+  onEdit: () => void;
+  onSelect: () => void;
+  onNewSale: () => void;
+  onDelete: () => Promise<void>;
+}) {
+  const itemClass = 'flex h-8 w-full items-center gap-2 rounded-sm px-2 text-left text-sm hover:bg-muted';
+
+  return (
+    <div className="absolute right-0 top-8 z-20 w-44 rounded-md border border-border bg-popover p-1 text-popover-foreground shadow-lg">
+      <button type="button" className={itemClass} onClick={() => { onEdit(); onClose(); }}>
+        <Edit className="h-4 w-4" />
+        Editar
+      </button>
+      <CustomerWhatsappButton
+        customer={customer}
+        variant="ghost"
+        size="sm"
+        className="h-8 w-full justify-start px-2"
+        {...whatsappActions}
+      />
+      <button type="button" className={itemClass} onClick={() => { onNewSale(); onClose(); }}>
+        <ShoppingCart className="h-4 w-4" />
+        Nova venda
+      </button>
+      <button type="button" className={itemClass} onClick={() => { onSelect(); onClose(); }}>
+        <History className="h-4 w-4" />
+        Histórico
+      </button>
+      <button
+        type="button"
+        className={`${itemClass} text-destructive disabled:cursor-not-allowed disabled:opacity-50`}
+        disabled={!cashOpen}
+        onClick={() => void onDelete().finally(onClose)}
+      >
+        <Trash2 className="h-4 w-4" />
+        Excluir
+      </button>
     </div>
   );
 }
 
 function emptyCustomer(): Customer {
-  return { id: '', name: '', phone: '', whatsapp: '', documentNumber: '', email: '', address: '', notes: '', updatedAt: '' };
+  return { id: '', name: '', phone: '', whatsapp: '', motorcycleModel: '', documentNumber: '', email: '', address: '', notes: '', updatedAt: '' };
 }
 
 function CustomerModal({
@@ -304,59 +326,65 @@ function CustomerModal({
   const [values, setValues] = useState(customer);
 
   return (
-    <div className="fixed inset-0 z-40 grid place-items-center bg-background/80 backdrop-blur-sm">
+    <DialogShell
+      title={customer.id ? 'Editar cliente' : 'Novo cliente'}
+      description="Dados de contato e cadastro do cliente."
+      onClose={onClose}
+      className="max-w-[720px]"
+    >
       <form
-        className="w-[720px] rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         onSubmit={(event) => {
           event.preventDefault();
           onSave(values);
         }}
       >
-        <div>
-          <h3 className="text-base font-semibold">{customer.id ? 'Editar cliente' : 'Novo cliente'}</h3>
-          <p className="mt-1 text-sm text-muted-foreground">Dados de contato e cadastro do cliente.</p>
-        </div>
-        <div className="mt-5 grid gap-4 md:grid-cols-2">
-          <Field label="Nome completo" className="md:col-span-2">
-            <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
-          </Field>
-          <Field label="Telefone">
-            <Input
-              value={formatBrazilianPhone(values.phone)}
-              onChange={(event) => setValues({ ...values, phone: event.target.value })}
-              inputMode="tel"
-            />
-          </Field>
-          <Field label="WhatsApp">
-            <Input
-              value={formatBrazilianPhone(values.whatsapp)}
-              onChange={(event) => setValues({ ...values, whatsapp: event.target.value })}
-              inputMode="tel"
-            />
-          </Field>
-          <Field label="CPF/CNPJ">
-            <Input
-              value={formatCpfCnpj(values.documentNumber)}
-              onChange={(event) => setValues({ ...values, documentNumber: event.target.value })}
-              inputMode="numeric"
-            />
-          </Field>
-          <Field label="E-mail">
-            <Input value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} />
-          </Field>
-          <Field label="Endereço" className="md:col-span-2">
-            <Input value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} />
-          </Field>
-          <Field label="Observações" className="md:col-span-2">
-            <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
-          </Field>
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
+        <DialogBody>
+          <div className="grid gap-4 md:grid-cols-2 compact:gap-3">
+            <Field label="Nome completo" className="md:col-span-2">
+              <Input value={values.name} onChange={(event) => setValues({ ...values, name: event.target.value })} required />
+            </Field>
+            <Field label="Telefone">
+              <Input
+                value={formatBrazilianPhone(values.phone)}
+                onChange={(event) => setValues({ ...values, phone: event.target.value })}
+                inputMode="tel"
+              />
+            </Field>
+            <Field label="WhatsApp">
+              <Input
+                value={formatBrazilianPhone(values.whatsapp)}
+                onChange={(event) => setValues({ ...values, whatsapp: event.target.value })}
+                inputMode="tel"
+              />
+            </Field>
+            <Field label="Modelo da moto">
+              <Input value={values.motorcycleModel} onChange={(event) => setValues({ ...values, motorcycleModel: event.target.value })} />
+            </Field>
+            <Field label="CPF/CNPJ">
+              <Input
+                value={formatCpfCnpj(values.documentNumber)}
+                onChange={(event) => setValues({ ...values, documentNumber: event.target.value })}
+                inputMode="numeric"
+              />
+            </Field>
+            <Field label="E-mail">
+              <Input value={values.email} onChange={(event) => setValues({ ...values, email: event.target.value })} />
+            </Field>
+            <Field label="Endereço" className="md:col-span-2">
+              <Input value={values.address} onChange={(event) => setValues({ ...values, address: event.target.value })} />
+            </Field>
+            <Field label="Observações" className="md:col-span-2">
+              <Input value={values.notes} onChange={(event) => setValues({ ...values, notes: event.target.value })} />
+            </Field>
+          </div>
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onClose}>Cancelar</Button>
           <Button type="submit">Salvar alterações</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }
 
@@ -365,6 +393,7 @@ function sanitizeCustomer(customer: Omit<Customer, 'updatedAt'>): Omit<Customer,
     ...customer,
     phone: sanitizePhone(customer.phone),
     whatsapp: sanitizePhone(customer.whatsapp || customer.phone),
+    motorcycleModel: customer.motorcycleModel.trim(),
     documentNumber: onlyDigits(customer.documentNumber),
   };
 }

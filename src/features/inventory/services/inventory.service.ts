@@ -1,20 +1,27 @@
 import { inventoryRepository } from '../repositories/inventory.repository';
 import type {
-  InventoryAlert,
+  CategoryFormValues,
   ImportColumnMapping,
   ImportSourceData,
+  InventoryAlert,
   InventoryFilters,
   Product,
-  CategoryFormValues,
   ProductFormValues,
   ProductImportDraft,
   ProductImportOptions,
-  ProductImportPreview,
   ProductImportRequest,
   StockMovementFormValues,
   SupplierFormValues,
 } from '../types/inventory.types';
 import { buildInventorySummary } from '../utils/inventory-calculations';
+import {
+  normalizeCode,
+  normalizeInteger,
+  normalizeMoney,
+  normalizeMoneyToCents,
+  normalizeSearchValue,
+  normalizeText,
+} from '../utils/import-products.normalizers';
 import { validateProduct, validateStockMovement } from '../validation/product.validation';
 
 export const inventoryService = {
@@ -105,15 +112,17 @@ export const inventoryService = {
     const existingByBarcode = new Map(
       products.filter((product) => product.barcode).map((product) => [normalize(product.barcode ?? ''), product]),
     );
-    const existingByName = new Map(products.map((product) => [normalize(product.name), product]));
+    const existingByNameBrand = new Map(products.map((product) => [joinKey(product.name, product.brand), product]));
+    const existingByNameApplication = new Map(products.map((product) => [joinKey(product.name, product.motorcycleApplication), product]));
     const seenInFile = new Set<string>();
-
     const reservedSkus = new Set(products.map((product) => normalize(product.sku)));
-    const drafts = [];
+    const drafts: ProductImportDraft[] = [];
 
     for (const [index, row] of source.rows.entries()) {
-      let mappedValues = mapRowToProduct(row, mapping, categories, suppliers);
+      const mapped = mapRowToProduct(row, mapping, categories, suppliers);
+      let mappedValues = mapped.values;
       let skuGeneratedAutomatically = false;
+
       if (!mappedValues.sku && mappedValues.name) {
         mappedValues = {
           ...mappedValues,
@@ -121,40 +130,52 @@ export const inventoryService = {
         };
         skuGeneratedAutomatically = true;
       }
-      const errors: string[] = [];
-      const warnings: string[] = [];
+
+      const errors: string[] = [...mapped.errors];
+      const warnings: string[] = [...mapped.warnings];
       const rowNumber = index + 2;
       const fileKey = normalize(mappedValues.sku || mappedValues.barcode);
-      const duplicateProduct = existingBySku.get(normalize(mappedValues.sku))
-        || existingByBarcode.get(normalize(mappedValues.barcode))
-        || existingByName.get(normalize(mappedValues.name));
-      const values =
-        duplicateProduct && options.duplicateStrategy === 'update_prices'
-          ? mergePriceUpdate(duplicateProduct, mappedValues)
-          : mappedValues;
-
-      if (!values.sku) {
-        errors.push('SKU / Código interno obrigatório.');
-      }
+      const duplicateMatch = findDuplicate(mappedValues, {
+        byBarcode: existingByBarcode,
+        bySku: existingBySku,
+        byNameBrand: existingByNameBrand,
+        byNameApplication: existingByNameApplication,
+      });
+      const duplicateProduct = duplicateMatch?.product;
+      const values = duplicateProduct && options.duplicateStrategy === 'update_existing'
+        ? mergeExistingProduct(duplicateProduct, mappedValues)
+        : mappedValues;
 
       if (!values.name) {
-        errors.push('Nome obrigatorio.');
+        errors.push('Nome do produto é obrigatório.');
       }
-
       if (!values.categoryId) {
-        warnings.push('Categoria nao encontrada, sera usada categoria padrao se existir.');
+        warnings.push('Sem categoria.');
       }
-
+      if (!values.supplierId && !values.supplierName) {
+        warnings.push('Sem fornecedor.');
+      }
       if (values.salePriceCents <= 0) {
-        warnings.push('Produto sem preço de venda.');
+        warnings.push('Sem preço de venda.');
       }
-
       if (values.costPriceCents <= 0) {
-        warnings.push('Produto sem custo.');
+        warnings.push('Sem custo.');
       }
-
+      if (values.salePriceCents > 0 && values.costPriceCents > values.salePriceCents) {
+        warnings.push('Margem negativa.');
+      }
+      if (values.currentStockQuantity === 0) {
+        warnings.push('Estoque zero.');
+      }
       if (fileKey && seenInFile.has(fileKey)) {
         errors.push('Duplicado dentro do arquivo.');
+      }
+      if (
+        duplicateMatch
+        && options.duplicateStrategy === 'create_new'
+        && (duplicateMatch.reason === 'Código de barras' || duplicateMatch.reason === 'SKU / Código interno')
+      ) {
+        errors.push(`${duplicateMatch.reason} duplicado. Escolha atualizar ou ignorar o duplicado.`);
       }
 
       const customKeys = mappedValues.customFields.map((field) => normalize(field.fieldKey)).filter(Boolean);
@@ -169,23 +190,31 @@ export const inventoryService = {
         reservedSkus.add(normalize(mappedValues.sku));
       }
 
-      const action: ProductImportDraft['action'] =
-        errors.length > 0
-          ? 'error'
-          : duplicateProduct && options.duplicateStrategy === 'skip'
-            ? 'skip'
-            : duplicateProduct
-              ? 'update'
-              : 'create';
+      const action: ProductImportDraft['action'] = errors.length > 0
+        ? 'error'
+        : duplicateProduct && options.duplicateStrategy === 'skip'
+          ? 'skip'
+          : duplicateProduct && options.duplicateStrategy === 'update_existing'
+            ? 'update'
+            : 'create';
+      const status: ProductImportDraft['status'] = action === 'error'
+        ? 'error'
+        : action === 'skip'
+          ? 'ignored'
+          : warnings.length > 0 || Boolean(duplicateProduct)
+            ? 'warning'
+            : 'ok';
 
       drafts.push({
         rowNumber,
         raw: row,
         values,
+        status,
         action,
-        duplicateProductId: duplicateProduct?.id,
+        duplicateProductId: action === 'update' || action === 'skip' ? duplicateProduct?.id : undefined,
+        duplicateReason: duplicateMatch?.reason,
         errors,
-        warnings: duplicateProduct ? ['Produto ja existe no cadastro.', ...warnings] : warnings,
+        warnings: duplicateProduct ? [`Possível duplicado por ${duplicateMatch.reason}.`, ...warnings] : warnings,
         skuGeneratedAutomatically,
       });
     }
@@ -193,13 +222,13 @@ export const inventoryService = {
     return {
       fileName: source.fileName,
       totalRows: drafts.length,
-      validRows: drafts.filter((draft) => draft.errors.length === 0).length,
+      validRows: drafts.filter((draft) => draft.errors.length === 0 && draft.action !== 'skip').length,
       createCount: drafts.filter((draft) => draft.action === 'create').length,
       updateCount: drafts.filter((draft) => draft.action === 'update').length,
       skipCount: drafts.filter((draft) => draft.action === 'skip').length,
       errorCount: drafts.filter((draft) => draft.action === 'error').length,
       drafts,
-    } satisfies ProductImportPreview;
+    };
   },
 
   importProducts(request: ProductImportRequest) {
@@ -216,51 +245,67 @@ function mapRowToProduct(
   mapping: ImportColumnMapping,
   categories: Awaited<ReturnType<typeof inventoryRepository.listCategories>>,
   suppliers: Awaited<ReturnType<typeof inventoryRepository.listSuppliers>>,
-): ProductImportDraft['values'] {
+): { values: ProductImportDraft['values']; errors: string[]; warnings: string[] } {
   const mapped = Object.entries(mapping).reduce<Record<string, string>>((result, [header, target]) => {
     if (target.kind === 'known' && target.field !== 'ignore') {
       result[target.field] = row[header] ?? '';
     }
     return result;
   }, {});
+
   const customFields = Object.entries(mapping)
     .filter(([, target]) => target.kind === 'custom')
     .map(([header, target]) => ({
       fieldKey: target.kind === 'custom' ? target.fieldKey : '',
       fieldLabel: target.kind === 'custom' ? target.fieldLabel : '',
       fieldType: target.kind === 'custom' ? target.fieldType : 'text',
-      fieldValue: row[header] ?? '',
+      fieldValue: target.kind === 'custom' ? normalizeCustomFieldValue(row[header], target.fieldType) : normalizeText(row[header]),
     }))
     .filter((field) => field.fieldKey && field.fieldLabel);
 
-  const category = categories.find((item) => normalize(item.id) === normalize(mapped.category) || normalize(item.name) === normalize(mapped.category));
-  const supplier = suppliers.find((item) => normalize(item.id) === normalize(mapped.supplier) || normalize(item.name) === normalize(mapped.supplier));
+  const errors: string[] = [];
+  const warnings: string[] = [];
+  const costPrice = normalizeMoneyToCents(mapped.costPrice);
+  const salePrice = normalizeMoneyToCents(mapped.salePrice);
+  const currentStock = normalizeInteger(mapped.currentStock);
+  const minStock = normalizeInteger(mapped.minStock);
+
+  if (!costPrice.ok) errors.push(`Preço de custo inválido. ${costPrice.message}`);
+  if (!salePrice.ok) errors.push(`Preço de venda inválido. ${salePrice.message}`);
+  if (!currentStock.ok) errors.push(`Estoque atual inválido. ${currentStock.message}`);
+  if (!minStock.ok) errors.push(`Estoque mínimo inválido. ${minStock.message}`);
+
+  const categoryName = normalizeText(mapped.category);
+  const supplierName = normalizeText(mapped.supplier);
+  const category = categories.find((item) => normalize(item.id) === normalize(categoryName) || normalize(item.name) === normalize(categoryName));
+  const supplier = suppliers.find((item) => normalize(item.id) === normalize(supplierName) || normalize(item.name) === normalize(supplierName));
 
   return {
-    sku: mapped.sku?.trim() ?? '',
-    barcode: mapped.barcode?.trim() ?? '',
-    name: mapped.name?.trim() ?? '',
-    categoryId: category?.id ?? categories[0]?.id ?? '',
-    categoryName: mapped.category?.trim() ?? '',
-    supplierId: supplier?.id ?? '',
-    supplierName: mapped.supplier?.trim() ?? '',
-    brand: mapped.brand?.trim() ?? '',
-    motorcycleApplication: mapped.motorcycleApplication?.trim() ?? '',
-    location: mapped.location?.trim() ?? '',
-    notes: mapped.notes?.trim() ?? '',
-    unit: mapped.unit?.trim() || 'un',
-    costPriceCents: parseMoneyToCents(mapped.costPrice),
-    salePriceCents: parseMoneyToCents(mapped.salePrice),
-    currentStockQuantity: parseNumber(mapped.currentStock),
-    minStockQuantity: parseNumber(mapped.minStock),
-    customFields,
+    values: {
+      sku: normalizeCode(mapped.sku),
+      barcode: normalizeCode(mapped.barcode),
+      name: normalizeText(mapped.name),
+      categoryId: category?.id ?? '',
+      categoryName,
+      supplierId: supplier?.id ?? '',
+      supplierName,
+      brand: normalizeText(mapped.brand),
+      motorcycleApplication: normalizeText(mapped.motorcycleApplication),
+      location: normalizeText(mapped.location),
+      notes: normalizeText(mapped.notes),
+      unit: normalizeText(mapped.unit) || 'un',
+      costPriceCents: costPrice.value,
+      salePriceCents: salePrice.value,
+      currentStockQuantity: currentStock.value,
+      minStockQuantity: minStock.value,
+      customFields,
+    },
+    errors,
+    warnings,
   };
 }
 
-async function generateReservedSku(
-  values: ProductImportDraft['values'],
-  reservedSkus: Set<string>,
-) {
+async function generateReservedSku(values: ProductImportDraft['values'], reservedSkus: Set<string>) {
   const firstCandidate = await inventoryRepository.generateProductSku({
     categoryId: values.categoryId || undefined,
     brand: values.brand || undefined,
@@ -277,24 +322,24 @@ async function generateReservedSku(
   return candidate;
 }
 
-function mergePriceUpdate(product: Product, imported: ProductImportDraft['values']): ProductImportDraft['values'] {
+function mergeExistingProduct(product: Product, imported: ProductImportDraft['values']): ProductImportDraft['values'] {
   return {
     sku: product.sku,
-    barcode: product.barcode ?? imported.barcode,
-    name: product.name,
-    categoryId: product.categoryId,
+    barcode: imported.barcode || product.barcode || '',
+    name: imported.name || product.name,
+    categoryId: imported.categoryId || product.categoryId,
     categoryName: imported.categoryName,
-    supplierId: product.supplierId ?? imported.supplierId,
+    supplierId: imported.supplierId || product.supplierId || '',
     supplierName: imported.supplierName,
-    brand: product.brand ?? imported.brand,
-    motorcycleApplication: product.motorcycleApplication ?? imported.motorcycleApplication,
-    location: product.location ?? imported.location,
-    notes: product.notes ?? imported.notes,
-    unit: product.unit,
+    brand: imported.brand || product.brand || '',
+    motorcycleApplication: imported.motorcycleApplication || product.motorcycleApplication || '',
+    location: imported.location || product.location || '',
+    notes: imported.notes || product.notes || '',
+    unit: imported.unit || product.unit,
     costPriceCents: imported.costPriceCents || product.costPriceCents,
     salePriceCents: imported.salePriceCents || product.salePriceCents,
-    minStockQuantity: product.minStockQuantity,
-    currentStockQuantity: product.currentStockQuantity,
+    minStockQuantity: imported.minStockQuantity || product.minStockQuantity,
+    currentStockQuantity: imported.currentStockQuantity || product.currentStockQuantity,
     customFields: imported.customFields,
   };
 }
@@ -304,8 +349,8 @@ function buildAlerts(summary: ReturnType<typeof buildInventorySummary>): Invento
     {
       id: 'low-stock',
       severity: 'warning',
-      title: `${summary.lowStockCount} produtos abaixo do minimo`,
-      detail: 'Priorize reposicao dos itens com maior giro nos ultimos 30 dias.',
+      title: `${summary.lowStockCount} produtos abaixo do mínimo`,
+      detail: 'Priorize reposição dos itens com maior giro nos últimos 30 dias.',
       actionLabel: 'Ver baixo estoque',
       filter: 'low_stock',
     },
@@ -313,7 +358,7 @@ function buildAlerts(summary: ReturnType<typeof buildInventorySummary>): Invento
       id: 'out-of-stock',
       severity: 'destructive',
       title: `${summary.outOfStockCount} produtos zerados`,
-      detail: 'Itens zerados travam venda no balcao e devem ser repostos ou inativados.',
+      detail: 'Itens zerados travam venda no balcão e devem ser repostos ou inativados.',
       actionLabel: 'Ver zerados',
       filter: 'out_of_stock',
     },
@@ -321,7 +366,7 @@ function buildAlerts(summary: ReturnType<typeof buildInventorySummary>): Invento
       id: 'pricing',
       severity: 'info',
       title: `${summary.unpricedCount + summary.uncostedCount} produtos sem preço ou custo`,
-      detail: 'Cadastre custo e venda para relatorios de margem confiaveis.',
+      detail: 'Cadastre custo e venda para relatórios de margem confiáveis.',
       actionLabel: 'Corrigir cadastro',
       filter: summary.unpricedCount > 0 ? 'unpriced' : 'uncosted',
     },
@@ -330,27 +375,57 @@ function buildAlerts(summary: ReturnType<typeof buildInventorySummary>): Invento
   return alerts.filter((alert) => !alert.title.startsWith('0 '));
 }
 
-function parseMoneyToCents(value: string | undefined) {
-  if (!value) {
-    return 0;
-  }
-
-  const normalized = value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '');
-  return Math.round(Number(normalized || 0) * 100);
-}
-
-function parseNumber(value: string | undefined) {
-  if (!value) {
-    return 0;
-  }
-
-  return Number(value.replace(/\./g, '').replace(',', '.').replace(/[^\d.]/g, '')) || 0;
-}
-
 function normalize(value: string | undefined) {
-  return (value ?? '')
-    .trim()
-    .toLocaleLowerCase('pt-BR')
-    .normalize('NFD')
-    .replace(/[\u0300-\u036f]/g, '');
+  return normalizeSearchValue(value);
+}
+
+function normalizeCustomFieldValue(value: string, type: ProductImportDraft['values']['customFields'][number]['fieldType']) {
+  if (type === 'currency') {
+    const parsed = normalizeMoney(value);
+    return parsed.ok ? String(parsed.value) : normalizeText(value);
+  }
+  if (type === 'number') {
+    const parsed = normalizeInteger(value);
+    return parsed.ok ? String(parsed.value) : normalizeText(value);
+  }
+  if (type === 'boolean') {
+    const normalized = normalizeSearchValue(value);
+    if (['sim', 'true', 'ativo', 'yes', '1'].includes(normalized)) return 'true';
+    if (['nao', 'false', 'inativo', 'no', '0'].includes(normalized)) return 'false';
+  }
+  return normalizeText(value);
+}
+
+function joinKey(first: string | undefined, second: string | undefined) {
+  const left = normalize(first);
+  const right = normalize(second);
+  return left && right ? `${left}||${right}` : '';
+}
+
+function findDuplicate(
+  values: ProductImportDraft['values'],
+  indexes: {
+    byBarcode: Map<string, Product>;
+    bySku: Map<string, Product>;
+    byNameBrand: Map<string, Product>;
+    byNameApplication: Map<string, Product>;
+  },
+) {
+  const barcode = normalize(values.barcode);
+  if (barcode && indexes.byBarcode.has(barcode)) {
+    return { product: indexes.byBarcode.get(barcode)!, reason: 'Código de barras' };
+  }
+  const sku = normalize(values.sku);
+  if (sku && indexes.bySku.has(sku)) {
+    return { product: indexes.bySku.get(sku)!, reason: 'SKU / Código interno' };
+  }
+  const nameBrand = joinKey(values.name, values.brand);
+  if (nameBrand && indexes.byNameBrand.has(nameBrand)) {
+    return { product: indexes.byNameBrand.get(nameBrand)!, reason: 'nome + marca' };
+  }
+  const nameApplication = joinKey(values.name, values.motorcycleApplication);
+  if (nameApplication && indexes.byNameApplication.has(nameApplication)) {
+    return { product: indexes.byNameApplication.get(nameApplication)!, reason: 'nome + aplicação' };
+  }
+  return null;
 }

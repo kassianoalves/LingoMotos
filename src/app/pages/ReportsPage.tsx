@@ -11,6 +11,7 @@ import { useCustomersStore } from '@features/customers/stores/customers.store';
 import { formatCurrency } from '@/utils/formatters';
 import { loadReports, toCsv } from '../services/reports.service';
 import { serviceClient } from '@shared/api/service-client';
+import { PageContainer, ScrollArea } from '@shared/components/layout';
 
 export function ReportsPage() {
   const filters = useFinanceStore((state) => state.filters);
@@ -148,8 +149,8 @@ export function ReportsPage() {
   }
 
   return (
-    <div className="space-y-6 px-6 pb-6 pt-4">
-      <div className="space-y-2">
+    <PageContainer className="gap-4">
+      <div className="flex-none space-y-2">
         <div className="flex flex-wrap items-end gap-2">
           <div className="flex-shrink-0">
             <FinancePeriodFilter filters={filters} onPeriodChange={setPeriod} onCustomPeriodChange={setCustomPeriod} />
@@ -176,7 +177,7 @@ export function ReportsPage() {
           </select>
         </div>
       </div>
-      <div className="grid gap-4 xl:grid-cols-3">
+      <ScrollArea className="grid gap-4 xl:grid-cols-3">
         <ReportCard title="Vendas por periodo" value={`${salesRows.length} vendas`} rows={salesRows} onExport={exportRows} kind="vendas" />
         <ReportCard title="Produtos mais vendidos" value={`${reports?.sales?.topProducts?.length ?? 0} produtos`} rows={reports?.sales?.topProducts ?? []} onExport={exportRows} kind="mais-vendidos" />
         <ReportCard title="Produtos com estoque baixo" value={`${lowStockRows.length} itens`} rows={lowStockRows} onExport={exportRows} kind="estoque-baixo" />
@@ -187,7 +188,7 @@ export function ReportsPage() {
         <ReportCard title="Clientes com compras" value={`${customerRows.length} clientes`} rows={customerRows} onExport={exportRows} kind="clientes" />
         <ReportCard title="Estoque valorizado" value={formatCurrency(valuation?.costTotalCents ?? 0)} rows={valuation?.products ?? []} onExport={exportRows} kind="estoque-valorizado" />
         <ReportCard title="Produtos inativos/removidos" value={`${reports?.stock?.inactiveProducts?.length ?? 0} itens`} rows={reports?.stock?.inactiveProducts ?? []} onExport={exportRows} kind="produtos-inativos" />
-      </div>
+      </ScrollArea>
       {toast && (
         <div className={`fixed bottom-5 right-5 z-50 rounded-md px-4 py-3 text-sm shadow-lg ${
           toast.tone === 'success' ? 'bg-success text-success-foreground' : 'bg-destructive text-destructive-foreground'
@@ -195,7 +196,7 @@ export function ReportsPage() {
           {toast.message}
         </div>
       )}
-    </div>
+    </PageContainer>
   );
 }
 

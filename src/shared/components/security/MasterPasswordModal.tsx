@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button } from '@shared/components/ui/button';
 import { Input } from '@shared/components/ui/input';
 import { securityService } from '@shared/services/security.service';
+import { DialogBody, DialogShell, StickyDialogFooter } from '@shared/components/layout';
 
 export function MasterPasswordSetupModal({ onCreated }: { onCreated: () => void }) {
   const [password, setPassword] = useState('');
@@ -9,9 +10,9 @@ export function MasterPasswordSetupModal({ onCreated }: { onCreated: () => void 
   const [error, setError] = useState('');
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-background/90 backdrop-blur-sm">
+    <DialogShell title="Criar senha master" onClose={() => undefined} className="max-w-[420px]" zIndexClassName="z-[60]">
       <form
-        className="w-[420px] rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         onSubmit={async (event) => {
           event.preventDefault();
           if (password !== confirm) {
@@ -27,17 +28,16 @@ export function MasterPasswordSetupModal({ onCreated }: { onCreated: () => void 
           }
         }}
       >
-        <h2 className="text-base font-semibold">Criar senha master</h2>
-        <div className="mt-4 grid gap-3">
+        <DialogBody className="grid gap-3">
           <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha master" />
           <Input type="password" value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Confirmar senha" />
           {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
-        <div className="mt-5 flex justify-end">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="submit" disabled={password.length < 4 || confirm.length < 4}>Salvar senha</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }
 
@@ -55,9 +55,9 @@ export function MasterPasswordVerifyModal({
   const [busy, setBusy] = useState(false);
 
   return (
-    <div className="fixed inset-0 z-[60] grid place-items-center bg-background/90 backdrop-blur-sm">
+    <DialogShell title={title} onClose={onCancel} className="max-w-[420px]" zIndexClassName="z-[60]">
       <form
-        className="w-[420px] rounded-lg border border-border bg-card p-6 shadow-lg"
+        className="flex min-h-0 flex-1 flex-col overflow-hidden"
         onSubmit={async (event) => {
           event.preventDefault();
           setBusy(true);
@@ -73,16 +73,15 @@ export function MasterPasswordVerifyModal({
           }
         }}
       >
-        <h2 className="text-base font-semibold">{title}</h2>
-        <div className="mt-4 grid gap-3">
+        <DialogBody className="grid gap-3">
           <Input type="password" value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Senha master" />
           {error && <p className="text-sm text-destructive">{error}</p>}
-        </div>
-        <div className="mt-5 flex justify-end gap-2">
+        </DialogBody>
+        <StickyDialogFooter>
           <Button type="button" variant="outline" onClick={onCancel} disabled={busy}>Cancelar</Button>
           <Button type="submit" disabled={busy || !password}>{busy ? 'Processando...' : 'Confirmar'}</Button>
-        </div>
+        </StickyDialogFooter>
       </form>
-    </div>
+    </DialogShell>
   );
 }

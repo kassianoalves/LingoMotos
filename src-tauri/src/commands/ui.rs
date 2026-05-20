@@ -6,7 +6,11 @@ use tauri::State;
 
 #[tauri::command]
 pub fn open_external_url(url: String) -> AppResult<()> {
-    if !url.starts_with("https://wa.me/") {
+    let allowed_url = url.starts_with("https://wa.me/")
+        || url.starts_with("https://www.instagram.com/")
+        || url.starts_with("https://instagram.com/");
+
+    if !allowed_url {
         return Err(AppError::InvalidExternalUrl);
     }
 

@@ -37,6 +37,8 @@ const SECTION_ALIASES: Record<string, (typeof SECTION_TITLES)[number]> = {
   correcao: 'Corrigido',
   fixed: 'Corrigido',
   bugfixes: 'Corrigido',
+  remocao: 'Removido',
+  remocoes: 'Removido',
   removido: 'Removido',
   removidos: 'Removido',
   removed: 'Removido',
@@ -121,7 +123,7 @@ export function UpdateAvailableModal({
               Agora não
             </Button>
             <Button onClick={onConfirm} disabled={busy}>
-              {busy ? 'Atualizando...' : 'Atualizar agora'}
+              {busy ? 'Atualizando...' : 'Atualizar'}
             </Button>
           </div>
         </div>
@@ -184,6 +186,10 @@ function parseHeading(line: string): (typeof SECTION_TITLES)[number] | null {
     .replace(/[\u0300-\u036f]/g, '')
     .trim()
     .toLowerCase();
+
+  if (normalized === 'remocoes' || normalized === 'remocao') {
+    return 'Removido';
+  }
 
   return SECTION_ALIASES[normalized] ?? null;
 }
